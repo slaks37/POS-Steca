@@ -1,0 +1,17 @@
+# Dependensi
+node_modules/
+
+# Hasil build
+dist/
+backend/server
+backend/bin/
+
+# Konfigurasi & data lokal
+.env
+.env.local
+backend/data/
+
+# Editor & OS
+.DS_Store
+.idea/
+.vscode/
