@@ -134,6 +134,48 @@ func (p *Provider) Lock(tenantID string) *sync.Mutex {
 	return l
 }
 
+// DriveFolderProvisioner hanya menyiapkan folder Drive tenant, tanpa membuat
+// spreadsheet. Dipakai pada mode datastore postgres: sumber kebenaran data
+// sudah pindah ke database, tetapi gambar produk tetap disimpan di Drive
+// milik pemilik akun. Spreadsheet baru dibuat lagi nanti ketika fitur
+// sinkronisasi opsional diaktifkan.
+type DriveFolderProvisioner struct {
+	provider *Provider
+}
+
+// NewDriveFolderProvisioner membungkus provider menjadi Provisioner ringan.
+func NewDriveFolderProvisioner(p *Provider) *DriveFolderProvisioner {
+	return &DriveFolderProvisioner{provider: p}
+}
+
+var _ domain.Provisioner = (*DriveFolderProvisioner)(nil)
+
+// Provision memastikan folder Drive tenant tersedia.
+func (d *DriveFolderProvisioner) Provision(ctx context.Context, t *domain.Tenant) error {
+	return d.provider.ProvisionDriveFolder(ctx, t)
+}
+
+// ProvisionDriveFolder membuat (atau memakai ulang) folder Drive tenant.
+func (p *Provider) ProvisionDriveFolder(ctx context.Context, t *domain.Tenant) error {
+	if t.RefreshToken == "" {
+		return apperr.Unauthorized("refresh token Google tidak tersedia")
+	}
+	driveSvc, _, err := p.oauth.NewServices(ctx, t.RefreshToken)
+	if err != nil {
+		return apperr.Upstream("gagal menyiapkan koneksi Google").WithCause(err)
+	}
+
+	folderID, err := googleapi.NewDriveClient(driveSvc).
+		EnsureFolder(ctx, fmt.Sprintf("POS Steca - %s", t.BusinessName))
+	if err != nil {
+		return apperr.Upstream("gagal menyiapkan folder Drive").WithCause(err)
+	}
+	t.FolderID = folderID
+
+	p.Invalidate(t.ID)
+	return nil
+}
+
 // Provision menyiapkan folder Drive dan spreadsheet untuk tenant baru, lalu
 // memastikan seluruh sheet dan headernya tersedia.
 func (p *Provider) Provision(ctx context.Context, t *domain.Tenant) error {

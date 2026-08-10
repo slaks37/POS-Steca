@@ -13,10 +13,16 @@ import (
 type Datastore string
 
 const (
-	// DatastoreGoogle memakai Google Drive + Google Sheets (mode produksi).
+	// DatastorePostgres memakai PostgreSQL sebagai sumber kebenaran (mode
+	// produksi sejak tahap 1 migrasi). Google Drive tetap dipakai untuk
+	// menyimpan gambar produk.
+	DatastorePostgres Datastore = "postgres"
+	// DatastoreGoogle memakai Google Drive + Google Sheets sebagai sumber
+	// kebenaran. Dipertahankan agar instalasi lama tetap bisa berjalan dan
+	// sebagai dasar fitur sinkronisasi opsional pada tahap berikutnya.
 	DatastoreGoogle Datastore = "google"
 	// DatastoreMemory memakai penyimpanan in-memory untuk pengembangan lokal
-	// tanpa kredensial Google.
+	// dan mode demo, tanpa kredensial maupun database apa pun.
 	DatastoreMemory Datastore = "memory"
 )
 
@@ -38,6 +44,11 @@ type Config struct {
 	DataDir       string
 	EncryptionKey string
 
+	// DatabaseURL wajib diisi pada mode postgres, contoh:
+	// postgres://pos:pos@localhost:5432/pos_steca?sslmode=disable
+	DatabaseURL   string
+	RunMigrations bool
+
 	SheetsCacheTTL time.Duration
 }
 
@@ -54,6 +65,8 @@ func Load() (*Config, error) {
 		JWTSecret:          env("JWT_SECRET", ""),
 		JWTTTL:             envDuration("JWT_TTL", 12*time.Hour),
 		DataDir:            env("DATA_DIR", "./data"),
+		DatabaseURL:        env("DATABASE_URL", ""),
+		RunMigrations:      envBool("RUN_MIGRATIONS", true),
 		EncryptionKey:      env("ENCRYPTION_KEY", ""),
 		SheetsCacheTTL:     envDuration("SHEETS_CACHE_TTL", 20*time.Second),
 	}
@@ -66,9 +79,10 @@ func Load() (*Config, error) {
 	}
 
 	switch cfg.Datastore {
-	case DatastoreGoogle, DatastoreMemory:
+	case DatastorePostgres, DatastoreGoogle, DatastoreMemory:
 	default:
-		return nil, fmt.Errorf("POS_DATASTORE tidak dikenal: %q (pilih google atau memory)", cfg.Datastore)
+		return nil, fmt.Errorf(
+			"POS_DATASTORE tidak dikenal: %q (pilih postgres, google, atau memory)", cfg.Datastore)
 	}
 
 	if cfg.JWTSecret == "" {
@@ -80,8 +94,11 @@ func Load() (*Config, error) {
 		}
 	}
 
-	if cfg.Datastore == DatastoreGoogle {
+	if cfg.Datastore == DatastorePostgres || cfg.Datastore == DatastoreGoogle {
 		missing := []string{}
+		if cfg.Datastore == DatastorePostgres && cfg.DatabaseURL == "" {
+			missing = append(missing, "DATABASE_URL")
+		}
 		if cfg.GoogleClientID == "" {
 			missing = append(missing, "GOOGLE_CLIENT_ID")
 		}
@@ -107,6 +124,21 @@ func (c *Config) IsProduction() bool {
 func env(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok && strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v)
+	}
+	return fallback
+}
+
+// envBool membaca nilai boolean yang toleran terhadap penulisan umum.
+func envBool(key string, fallback bool) bool {
+	raw, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
 	}
 	return fallback
 }

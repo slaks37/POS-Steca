@@ -1,0 +1,52 @@
+# PostgreSQL untuk pengembangan lokal Steca POS.
+#
+#   docker compose up -d        # jalankan database
+#   docker compose logs -f db   # lihat log
+#   docker compose down         # hentikan (data tetap ada di volume)
+#   docker compose down -v      # hentikan sekaligus hapus seluruh data
+#
+# Setelah database jalan, backend cukup dijalankan dengan:
+#   POS_DATASTORE=postgres \
+#   DATABASE_URL="postgres://pos:pos@localhost:5432/pos_steca?sslmode=disable" \
+#   go run ./cmd/server
+#
+# Compose file ini HANYA untuk development. Untuk produksi, pemilik aplikasi
+# menyediakan sendiri layanan PostgreSQL (self-hosted atau managed) — lihat
+# bagian "PostgreSQL" pada README.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: steca-pos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: pos
+      POSTGRES_DB: pos_steca
+      # Locale C membuat pengurutan konsisten dengan lingkungan produksi mana pun.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - steca-pos-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos_steca"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Antarmuka web opsional untuk melihat isi tabel saat pengembangan.
+  # Jalankan dengan: docker compose --profile tools up -d
+  adminer:
+    image: adminer:latest
+    container_name: steca-pos-adminer
+    restart: unless-stopped
+    profiles: ["tools"]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+
+volumes:
+  steca-pos-db-data:

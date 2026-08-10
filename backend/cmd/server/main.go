@@ -18,6 +18,7 @@ import (
 	"github.com/slaks37/pos-steca/backend/internal/handler"
 	"github.com/slaks37/pos-steca/backend/internal/repository/gsheets"
 	"github.com/slaks37/pos-steca/backend/internal/repository/memory"
+	"github.com/slaks37/pos-steca/backend/internal/repository/postgres"
 	"github.com/slaks37/pos-steca/backend/internal/repository/tenantstore"
 	"github.com/slaks37/pos-steca/backend/internal/service"
 	"github.com/slaks37/pos-steca/backend/internal/timex"
@@ -36,11 +37,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	deps, err := buildDeps(cfg)
+	deps, cleanup, err := buildDeps(context.Background(), cfg)
 	if err != nil {
 		slog.Error("gagal menyiapkan aplikasi", "error", err)
 		os.Exit(1)
 	}
+	defer cleanup()
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -76,7 +78,8 @@ func main() {
 }
 
 // buildDeps merakit repository dan service sesuai mode datastore yang dipilih.
-func buildDeps(cfg *config.Config) (*handler.Deps, error) {
+// Fungsi cleanup yang dikembalikan menutup sumber daya seperti pool database.
+func buildDeps(ctx context.Context, cfg *config.Config) (*handler.Deps, func(), error) {
 	var (
 		tenants      domain.TenantStore
 		provisioner  domain.Provisioner
@@ -89,17 +92,53 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 		storage      domain.FileStorage
 		oauth        *googleapi.OAuthManager
 		memStore     *memory.Store
+		cleanup      = func() {}
 	)
 
 	switch cfg.Datastore {
+	case config.DatastorePostgres:
+		sealer, err := crypto.NewSealer(cfg.EncryptionKey)
+		if err != nil {
+			return nil, cleanup, err
+		}
+		pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
+		if err != nil {
+			return nil, cleanup, err
+		}
+		cleanup = pool.Close
+
+		if cfg.RunMigrations {
+			if err := postgres.Migrate(ctx, pool); err != nil {
+				pool.Close()
+				return nil, func() {}, err
+			}
+		}
+
+		store := postgres.NewTenantStore(pool, sealer)
+		tenants = store
+		products = postgres.NewProductRepository(pool)
+		transactions = postgres.NewTransactionRepository(pool)
+		orders = postgres.NewOrderRepository(pool)
+		employees = postgres.NewEmployeeRepository(pool)
+		customers = postgres.NewCustomerRepository(pool)
+		tables = postgres.NewTableRepository(pool)
+
+		// Data sudah pindah ke PostgreSQL, tetapi gambar produk tetap
+		// disimpan di folder Drive milik pemilik akun sehingga onboarding
+		// hanya perlu menyiapkan foldernya.
+		oauth = googleapi.NewOAuthManager(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
+		provider := gsheets.NewProvider(oauth, store)
+		provisioner = gsheets.NewDriveFolderProvisioner(provider)
+		storage = gsheets.NewFileStorage(provider)
+
 	case config.DatastoreGoogle:
 		sealer, err := crypto.NewSealer(cfg.EncryptionKey)
 		if err != nil {
-			return nil, err
+			return nil, cleanup, err
 		}
 		store, err := tenantstore.NewFileStore(cfg.DataDir, sealer)
 		if err != nil {
-			return nil, err
+			return nil, cleanup, err
 		}
 		oauth = googleapi.NewOAuthManager(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
 		provider := gsheets.NewProvider(oauth, store)
@@ -157,5 +196,5 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 		Tables:      tableService,
 		Tenants:     tenants,
 		MemoryStore: memStore,
-	}, nil
+	}, cleanup, nil
 }
