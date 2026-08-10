@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { BarChart, EmptyState, ErrorAlert, LoadingRows, StatCard } from '../components/ui'
+import { BarChart, EmptyState, ErrorAlert, LoadingCards, StatCard } from '../components/ui'
 import { ApiError, request } from '../lib/api'
 import type { Envelope } from '../lib/api'
 import { daysAgo, formatDateTime, formatNumber, formatRupiah, toDateInput } from '../lib/format'
@@ -89,16 +89,17 @@ export function ReportsPage() {
       <ErrorAlert message={error} />
 
       {loading ? (
-        <div className="card">
-          <LoadingRows rows={6} />
+        <div className="stack">
+          <LoadingCards count={4} />
+          <div className="skeleton" style={{ height: 260, borderRadius: 12 }} />
         </div>
       ) : report ? (
         <>
           <div className="grid grid-4">
-            <StatCard label="Total omzet" value={formatRupiah(report.total_omzet)} />
-            <StatCard label="Jumlah transaksi" value={formatNumber(report.total_transactions)} />
-            <StatCard label="Item terjual" value={formatNumber(report.total_items)} />
-            <StatCard label="Rata-rata belanja" value={formatRupiah(report.average_basket)} />
+            <StatCard icon="💰" label="Total omzet" value={formatRupiah(report.total_omzet)} />
+            <StatCard icon="🧾" label="Jumlah transaksi" value={formatNumber(report.total_transactions)} />
+            <StatCard icon="📦" label="Item terjual" value={formatNumber(report.total_items)} />
+            <StatCard icon="📊" label="Rata-rata belanja" value={formatRupiah(report.average_basket)} />
           </div>
 
           <div className="card">
@@ -108,7 +109,7 @@ export function ReportsPage() {
             </div>
             <div className="card-pad">
               {report.series.length === 0 ? (
-                <EmptyState title="Belum ada penjualan pada rentang ini" />
+                <EmptyState icon="📊" title="Belum ada penjualan pada rentang ini" hint="Coba perlebar rentang tanggalnya." />
               ) : (
                 <BarChart
                   data={report.series.slice(-14).map((p) => ({ label: p.label, value: p.omzet }))}
@@ -124,7 +125,7 @@ export function ReportsPage() {
                 <h3>Produk terlaris</h3>
               </div>
               {report.top_products.length === 0 ? (
-                <EmptyState title="Belum ada data" />
+                <EmptyState icon="📄" title="Belum ada data" />
               ) : (
                 <table className="table">
                   <thead>
@@ -138,7 +139,9 @@ export function ReportsPage() {
                   <tbody>
                     {report.top_products.slice(0, 10).map((p, i) => (
                       <tr key={p.name}>
-                        <td className="muted">{i + 1}</td>
+                        <td>
+                          <span className={`rank${i === 0 ? ' rank-1' : ''}`}>{i + 1}</span>
+                        </td>
                         <td>{p.name}</td>
                         <td className="table-num">{formatNumber(p.qty)}</td>
                         <td className="table-num">{formatRupiah(p.omzet)}</td>
@@ -155,7 +158,7 @@ export function ReportsPage() {
                   <h3>Metode pembayaran</h3>
                 </div>
                 {report.payments.length === 0 ? (
-                  <EmptyState title="Belum ada data" />
+                  <EmptyState icon="📄" title="Belum ada data" />
                 ) : (
                   <table className="table">
                     <thead>
@@ -183,7 +186,7 @@ export function ReportsPage() {
                   <h3>Performa kasir</h3>
                 </div>
                 {report.cashiers.length === 0 ? (
-                  <EmptyState title="Belum ada data" />
+                  <EmptyState icon="📄" title="Belum ada data" />
                 ) : (
                   <table className="table">
                     <thead>
@@ -214,7 +217,7 @@ export function ReportsPage() {
               <span className="badge">{transactions.length} struk terakhir</span>
             </div>
             {transactions.length === 0 ? (
-              <EmptyState title="Belum ada transaksi" />
+              <EmptyState icon="🧾" title="Belum ada transaksi" />
             ) : (
               <div className="table-scroll">
                 <table className="table">

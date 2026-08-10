@@ -134,6 +134,77 @@ func (r *EmployeeRepo) Delete(ctx context.Context, tenantID, employeeID string) 
 	return r.s.DeleteEmployee(ctx, tenantID, employeeID)
 }
 
+// CustomerRepo mengadaptasi Store menjadi domain.CustomerRepository.
+type CustomerRepo struct{ s *Store }
+
+// NewCustomerRepo membuat adapter repository pelanggan in-memory.
+func NewCustomerRepo(s *Store) *CustomerRepo { return &CustomerRepo{s: s} }
+
+var _ domain.CustomerRepository = (*CustomerRepo)(nil)
+
+// List meneruskan ke Store.
+func (r *CustomerRepo) List(ctx context.Context, tenantID string) ([]domain.Customer, error) {
+	return r.s.ListCustomers(ctx, tenantID)
+}
+
+// Get meneruskan ke Store.
+func (r *CustomerRepo) Get(ctx context.Context, tenantID, customerID string) (*domain.Customer, error) {
+	return r.s.GetCustomer(ctx, tenantID, customerID)
+}
+
+// GetByPhone meneruskan ke Store.
+func (r *CustomerRepo) GetByPhone(ctx context.Context, tenantID, phone string) (*domain.Customer, error) {
+	return r.s.GetCustomerByPhone(ctx, tenantID, phone)
+}
+
+// Create meneruskan ke Store.
+func (r *CustomerRepo) Create(ctx context.Context, tenantID string, c *domain.Customer) error {
+	return r.s.CreateCustomer(ctx, tenantID, c)
+}
+
+// Update meneruskan ke Store.
+func (r *CustomerRepo) Update(ctx context.Context, tenantID string, c *domain.Customer) error {
+	return r.s.UpdateCustomer(ctx, tenantID, c)
+}
+
+// Delete meneruskan ke Store.
+func (r *CustomerRepo) Delete(ctx context.Context, tenantID, customerID string) error {
+	return r.s.DeleteCustomer(ctx, tenantID, customerID)
+}
+
+// TableRepo mengadaptasi Store menjadi domain.TableRepository.
+type TableRepo struct{ s *Store }
+
+// NewTableRepo membuat adapter repository meja in-memory.
+func NewTableRepo(s *Store) *TableRepo { return &TableRepo{s: s} }
+
+var _ domain.TableRepository = (*TableRepo)(nil)
+
+// List meneruskan ke Store.
+func (r *TableRepo) List(ctx context.Context, tenantID string) ([]domain.Table, error) {
+	return r.s.ListTables(ctx, tenantID)
+}
+
+// Get meneruskan ke Store.
+func (r *TableRepo) Get(ctx context.Context, tenantID, tableID string) (*domain.Table, error) {
+	return r.s.GetTable(ctx, tenantID, tableID)
+}
+
+// Create meneruskan ke Store.
+func (r *TableRepo) Create(ctx context.Context, tenantID string, tb *domain.Table) error {
+	return r.s.CreateTable(ctx, tenantID, tb)
+}
+
+// Update meneruskan ke Store.
+func (r *TableRepo) Update(ctx context.Context, tenantID string, tb *domain.Table) error {
+	return r.s.UpdateTable(ctx, tenantID, tb)
+}
+
+// Delete meneruskan ke Store.
+func (r *TableRepo) Delete(ctx context.Context, tenantID, tableID string) error {
+	return r.s.DeleteTable(ctx, tenantID, tableID)
+}
+
 // Storage mengadaptasi Store menjadi domain.FileStorage.
 type Storage struct{ s *Store }
 

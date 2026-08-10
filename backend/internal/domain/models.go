@@ -3,7 +3,10 @@
 // penyimpanan apa pun.
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Role menentukan level akses pengguna di dalam satu tenant.
 type Role string
@@ -48,6 +51,27 @@ const (
 // Valid memastikan sumber pesanan dikenal sistem.
 func (s OrderSource) Valid() bool {
 	return s == OrderSourceKasir || s == OrderSourceOnline
+}
+
+// TableStatus adalah kondisi meja pada denah bisnis F&B.
+type TableStatus string
+
+const (
+	// TableStatusKosong berarti meja siap dipakai pelanggan berikutnya.
+	TableStatusKosong TableStatus = "kosong"
+	// TableStatusTerisi berarti ada pesanan aktif di meja tersebut.
+	TableStatusTerisi TableStatus = "terisi"
+	// TableStatusDibersihkan berarti tamu sudah pergi dan meja perlu dirapikan.
+	TableStatusDibersihkan TableStatus = "dibersihkan"
+)
+
+// Valid memastikan status meja dikenal sistem.
+func (s TableStatus) Valid() bool {
+	switch s {
+	case TableStatusKosong, TableStatusTerisi, TableStatusDibersihkan:
+		return true
+	}
+	return false
 }
 
 // Metode pembayaran yang didukung modul kasir. QRIS dan kartu masih
@@ -130,6 +154,50 @@ type Product struct {
 	RowNumber int     `json:"-"`
 }
 
+// NormalizePhone menyeragamkan nomor HP Indonesia agar satu pelanggan tidak
+// tercatat ganda hanya karena beda penulisan ("0812-3456", "+62 812 3456").
+func NormalizePhone(phone string) string {
+	var digits strings.Builder
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			digits.WriteRune(r)
+		}
+	}
+	s := digits.String()
+	switch {
+	case strings.HasPrefix(s, "62"):
+		s = "0" + strings.TrimPrefix(s, "62")
+	case s != "" && !strings.HasPrefix(s, "0"):
+		s = "0" + s
+	}
+	return s
+}
+
+// Customer adalah pelanggan terdaftar pada program loyalitas sederhana.
+// Transaksi tanpa pelanggan (anonim) tetap diperbolehkan.
+type Customer struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Phone        string    `json:"phone"`
+	TotalSpent   float64   `json:"total_spent"`
+	Points       int       `json:"points"`
+	LastPurchase time.Time `json:"last_purchase"`
+	CreatedAt    time.Time `json:"created_at"`
+	RowNumber    int       `json:"-"`
+}
+
+// Table adalah satu meja pada denah bisnis F&B.
+type Table struct {
+	ID            string      `json:"id"`
+	Name          string      `json:"name"`
+	Capacity      int         `json:"capacity"`
+	Status        TableStatus `json:"status"`
+	Area          string      `json:"area"`
+	ActiveOrderID string      `json:"active_order_id"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	RowNumber     int         `json:"-"`
+}
+
 // OrderItem adalah baris item pada satu pesanan/transaksi.
 type OrderItem struct {
 	ProductID string  `json:"product_id"`
@@ -167,6 +235,12 @@ type Transaction struct {
 	Cashier       string      `json:"cashier"`
 	AmountPaid    float64     `json:"amount_paid,omitempty"`
 	Change        float64     `json:"change,omitempty"`
+
+	// Keterangan loyalitas untuk dicetak di struk. Kosong pada transaksi
+	// anonim.
+	CustomerName string `json:"customer_name,omitempty"`
+	PointsEarned int    `json:"points_earned,omitempty"`
+	TotalPoints  int    `json:"total_points,omitempty"`
 }
 
 // Order adalah pesanan yang dilacak status pengerjaannya (modul ala Trofi).
@@ -184,5 +258,12 @@ type Order struct {
 	Cashier       string      `json:"cashier"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
-	RowNumber     int         `json:"-"`
+
+	// CustomerID dan TableID menghubungkan pesanan ke modul CRM dan denah
+	// meja. Keduanya boleh kosong: pesanan anonim dan pesanan bawa pulang
+	// tetap sah.
+	CustomerID string `json:"customer_id"`
+	TableID    string `json:"table_id"`
+
+	RowNumber int `json:"-"`
 }

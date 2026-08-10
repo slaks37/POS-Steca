@@ -138,14 +138,139 @@ func (f *fakeTransactions) ListLines(_ context.Context, _ string, from, to time.
 	return out, nil
 }
 
-func newOrderFixture() (*OrderService, *fakeProducts, *fakeOrders, *fakeTransactions) {
+type fakeCustomers struct{ items []domain.Customer }
+
+func (f *fakeCustomers) List(context.Context, string) ([]domain.Customer, error) {
+	out := make([]domain.Customer, len(f.items))
+	copy(out, f.items)
+	return out, nil
+}
+
+func (f *fakeCustomers) Get(_ context.Context, _, id string) (*domain.Customer, error) {
+	for i := range f.items {
+		if f.items[i].ID == id {
+			c := f.items[i]
+			return &c, nil
+		}
+	}
+	return nil, apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+func (f *fakeCustomers) GetByPhone(_ context.Context, _, phone string) (*domain.Customer, error) {
+	phone = domain.NormalizePhone(phone)
+	for i := range f.items {
+		if phone != "" && domain.NormalizePhone(f.items[i].Phone) == phone {
+			c := f.items[i]
+			return &c, nil
+		}
+	}
+	return nil, apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+func (f *fakeCustomers) Create(_ context.Context, _ string, c *domain.Customer) error {
+	f.items = append(f.items, *c)
+	return nil
+}
+
+func (f *fakeCustomers) Update(_ context.Context, _ string, c *domain.Customer) error {
+	for i := range f.items {
+		if f.items[i].ID == c.ID {
+			f.items[i] = *c
+			return nil
+		}
+	}
+	return apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+func (f *fakeCustomers) Delete(_ context.Context, _, id string) error {
+	for i := range f.items {
+		if f.items[i].ID == id {
+			f.items = append(f.items[:i], f.items[i+1:]...)
+			return nil
+		}
+	}
+	return apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+type fakeTables struct{ items []domain.Table }
+
+func (f *fakeTables) List(context.Context, string) ([]domain.Table, error) {
+	out := make([]domain.Table, len(f.items))
+	copy(out, f.items)
+	return out, nil
+}
+
+func (f *fakeTables) Get(_ context.Context, _, id string) (*domain.Table, error) {
+	for i := range f.items {
+		if f.items[i].ID == id {
+			tb := f.items[i]
+			return &tb, nil
+		}
+	}
+	return nil, apperr.NotFound("meja tidak ditemukan")
+}
+
+func (f *fakeTables) Create(_ context.Context, _ string, tb *domain.Table) error {
+	f.items = append(f.items, *tb)
+	return nil
+}
+
+func (f *fakeTables) Update(_ context.Context, _ string, tb *domain.Table) error {
+	for i := range f.items {
+		if f.items[i].ID == tb.ID {
+			f.items[i] = *tb
+			return nil
+		}
+	}
+	return apperr.NotFound("meja tidak ditemukan")
+}
+
+func (f *fakeTables) Delete(_ context.Context, _, id string) error {
+	for i := range f.items {
+		if f.items[i].ID == id {
+			f.items = append(f.items[:i], f.items[i+1:]...)
+			return nil
+		}
+	}
+	return apperr.NotFound("meja tidak ditemukan")
+}
+
+type orderFixture struct {
+	svc          *OrderService
+	products     *fakeProducts
+	orders       *fakeOrders
+	transactions *fakeTransactions
+	customers    *fakeCustomers
+	tables       *fakeTables
+	customerSvc  *CustomerService
+	tableSvc     *TableService
+}
+
+func newOrderFixture() *orderFixture {
 	products := &fakeProducts{items: []domain.Product{
 		{ID: "P1", Name: "Nasi Goreng", Price: 25000, Stock: 10},
 		{ID: "P2", Name: "Es Teh", Price: 6000, Stock: 3},
 	}}
 	orders := &fakeOrders{}
 	transactions := &fakeTransactions{}
-	return NewOrderService(products, orders, transactions), products, orders, transactions
+	customers := &fakeCustomers{}
+	tables := &fakeTables{items: []domain.Table{
+		{ID: "T-1", Name: "Meja 1", Capacity: 4, Status: domain.TableStatusKosong},
+	}}
+
+	customerSvc := NewCustomerService(customers, orders)
+	tableSvc := NewTableService(tables, orders)
+
+	return &orderFixture{
+		svc:          NewOrderService(products, orders, transactions, customerSvc, tableSvc),
+		products:     products,
+		orders:       orders,
+		transactions: transactions,
+		customers:    customers,
+		tables:       tables,
+		customerSvc:  customerSvc,
+		tableSvc:     tableSvc,
+	}
 }
 
 func codeOf(t *testing.T, err error) string {
@@ -160,7 +285,8 @@ func codeOf(t *testing.T, err error) string {
 // --- Pengujian ---
 
 func TestCheckoutMenghitungTotalDanStruk(t *testing.T) {
-	svc, products, orders, transactions := newOrderFixture()
+	f := newOrderFixture()
+	svc, products, orders, transactions := f.svc, f.products, f.orders, f.transactions
 
 	result, err := svc.Checkout(context.Background(), "T1", "Ani", CheckoutInput{
 		Items:         []CartItem{{ProductID: "P1", Qty: 2}, {ProductID: "P2", Qty: 1}},
@@ -202,7 +328,8 @@ func TestCheckoutMenghitungTotalDanStruk(t *testing.T) {
 }
 
 func TestCheckoutMenggabungkanItemGanda(t *testing.T) {
-	svc, _, _, transactions := newOrderFixture()
+	f := newOrderFixture()
+	svc, transactions := f.svc, f.transactions
 
 	result, err := svc.Checkout(context.Background(), "T1", "Ani", CheckoutInput{
 		Items:         []CartItem{{ProductID: "P1", Qty: 1}, {ProductID: "P1", Qty: 2, Note: "pedas"}},
@@ -220,7 +347,8 @@ func TestCheckoutMenggabungkanItemGanda(t *testing.T) {
 }
 
 func TestCheckoutMenolakStokKurang(t *testing.T) {
-	svc, _, _, transactions := newOrderFixture()
+	f := newOrderFixture()
+	svc, transactions := f.svc, f.transactions
 
 	_, err := svc.Checkout(context.Background(), "T1", "Ani", CheckoutInput{
 		Items:         []CartItem{{ProductID: "P2", Qty: 5}}, // stok hanya 3
@@ -238,7 +366,7 @@ func TestCheckoutMenolakStokKurang(t *testing.T) {
 }
 
 func TestCheckoutMenolakInputTidakValid(t *testing.T) {
-	svc, _, _, _ := newOrderFixture()
+	svc := newOrderFixture().svc
 	ctx := context.Background()
 
 	cases := []struct {
@@ -268,7 +396,8 @@ func TestCheckoutMenolakInputTidakValid(t *testing.T) {
 }
 
 func TestCheckoutTetapBerhasilSaatSinkronStokGagal(t *testing.T) {
-	svc, products, _, transactions := newOrderFixture()
+	f := newOrderFixture()
+	svc, products, transactions := f.svc, f.products, f.transactions
 	products.failAdjust = true
 
 	result, err := svc.Checkout(context.Background(), "T1", "Ani", CheckoutInput{
@@ -287,7 +416,8 @@ func TestCheckoutTetapBerhasilSaatSinkronStokGagal(t *testing.T) {
 }
 
 func TestOnlineOrderBelumTerbayar(t *testing.T) {
-	svc, products, _, transactions := newOrderFixture()
+	f := newOrderFixture()
+	svc, products, transactions := f.svc, f.products, f.transactions
 
 	order, err := svc.CreateOnlineOrder(context.Background(), "T1", OnlineOrderInput{
 		Items:        []CartItem{{ProductID: "P1", Qty: 2}},
@@ -311,7 +441,7 @@ func TestOnlineOrderBelumTerbayar(t *testing.T) {
 }
 
 func TestOnlineOrderWajibNamaPemesan(t *testing.T) {
-	svc, _, _, _ := newOrderFixture()
+	svc := newOrderFixture().svc
 	_, err := svc.CreateOnlineOrder(context.Background(), "T1", OnlineOrderInput{
 		Items: []CartItem{{ProductID: "P1", Qty: 1}},
 	})
@@ -324,7 +454,7 @@ func TestOnlineOrderWajibNamaPemesan(t *testing.T) {
 }
 
 func TestUpdateStatusAlurPesanan(t *testing.T) {
-	svc, _, _, _ := newOrderFixture()
+	svc := newOrderFixture().svc
 	ctx := context.Background()
 
 	order, err := svc.CreateOnlineOrder(ctx, "T1", OnlineOrderInput{
@@ -348,7 +478,8 @@ func TestUpdateStatusAlurPesanan(t *testing.T) {
 }
 
 func TestBatalkanPesananMengembalikanStok(t *testing.T) {
-	svc, products, _, _ := newOrderFixture()
+	f := newOrderFixture()
+	svc, products := f.svc, f.products
 	ctx := context.Background()
 
 	order, err := svc.CreateOnlineOrder(ctx, "T1", OnlineOrderInput{
@@ -374,7 +505,7 @@ func TestBatalkanPesananMengembalikanStok(t *testing.T) {
 }
 
 func TestPesananTerbayarTidakBisaDibatalkan(t *testing.T) {
-	svc, _, _, _ := newOrderFixture()
+	svc := newOrderFixture().svc
 	ctx := context.Background()
 
 	result, err := svc.Checkout(ctx, "T1", "Ani", CheckoutInput{
@@ -394,7 +525,8 @@ func TestPesananTerbayarTidakBisaDibatalkan(t *testing.T) {
 }
 
 func TestSettlePesananOnline(t *testing.T) {
-	svc, _, _, transactions := newOrderFixture()
+	f := newOrderFixture()
+	svc, transactions := f.svc, f.transactions
 	ctx := context.Background()
 
 	order, err := svc.CreateOnlineOrder(ctx, "T1", OnlineOrderInput{
@@ -404,7 +536,7 @@ func TestSettlePesananOnline(t *testing.T) {
 		t.Fatalf("persiapan gagal: %v", err)
 	}
 
-	result, err := svc.Settle(ctx, "T1", order.ID, "Budi", domain.PaymentQRIS, 0)
+	result, err := svc.Settle(ctx, "T1", order.ID, "Budi", domain.PaymentQRIS, 0, "")
 	if err != nil {
 		t.Fatalf("settle gagal: %v", err)
 	}
@@ -418,13 +550,13 @@ func TestSettlePesananOnline(t *testing.T) {
 		t.Errorf("baris transaksi = %+v, ingin satu baris total 50000", transactions.lines)
 	}
 
-	if _, err := svc.Settle(ctx, "T1", order.ID, "Budi", domain.PaymentTunai, 50000); err == nil {
+	if _, err := svc.Settle(ctx, "T1", order.ID, "Budi", domain.PaymentTunai, 50000, ""); err == nil {
 		t.Error("pesanan yang sudah lunas tidak boleh dibayar dua kali")
 	}
 }
 
 func TestListMenolakFilterTidakDikenal(t *testing.T) {
-	svc, _, _, _ := newOrderFixture()
+	svc := newOrderFixture().svc
 	ctx := context.Background()
 
 	if _, err := svc.List(ctx, "T1", "ngawur", "", time.Time{}, time.Time{}); err == nil {

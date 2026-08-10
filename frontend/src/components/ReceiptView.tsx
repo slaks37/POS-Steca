@@ -48,10 +48,10 @@ export function ReceiptView({
           <span>{order.table_no}</span>
         </div>
       ) : null}
-      {order?.customer_name ? (
+      {receipt.customer_name || order?.customer_name ? (
         <div className="receipt-line">
           <span>Pelanggan</span>
-          <span>{order.customer_name}</span>
+          <span>{receipt.customer_name || order?.customer_name}</span>
         </div>
       ) : null}
       <hr />
@@ -85,6 +85,18 @@ export function ReceiptView({
         <div className="receipt-line">
           <span>Kembali</span>
           <span>{formatRupiah(receipt.change)}</span>
+        </div>
+      ) : null}
+      {receipt.points_earned ? (
+        <div className="receipt-loyalty">
+          <div className="receipt-line">
+            <span>Poin didapat</span>
+            <span>+{receipt.points_earned}</span>
+          </div>
+          <div className="receipt-line">
+            <span>Total poin</span>
+            <span>{receipt.total_points ?? 0}</span>
+          </div>
         </div>
       ) : null}
       <hr />

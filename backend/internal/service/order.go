@@ -25,14 +25,26 @@ type CheckoutInput struct {
 	CustomerName  string     `json:"customer_name"`
 	TableNo       string     `json:"table_no"`
 	Note          string     `json:"note"`
+
+	// CustomerID diisi bila kasir memilih pelanggan terdaftar. Bila kosong
+	// tetapi CustomerPhone terisi, pelanggan dicari lewat nomor HP dan
+	// didaftarkan otomatis kalau belum ada. Keduanya boleh kosong untuk
+	// transaksi anonim.
+	CustomerID    string `json:"customer_id"`
+	CustomerPhone string `json:"customer_phone"`
+
+	// TableID mengaitkan transaksi ke meja pada denah.
+	TableID string `json:"table_id"`
 }
 
 // OnlineOrderInput adalah payload pemesanan dari kanal online.
 type OnlineOrderInput struct {
-	Items        []CartItem `json:"items"`
-	CustomerName string     `json:"customer_name"`
-	TableNo      string     `json:"table_no"`
-	Note         string     `json:"note"`
+	Items         []CartItem `json:"items"`
+	CustomerName  string     `json:"customer_name"`
+	CustomerPhone string     `json:"customer_phone"`
+	TableNo       string     `json:"table_no"`
+	TableID       string     `json:"table_id"`
+	Note          string     `json:"note"`
 }
 
 // CheckoutResult mengembalikan pesanan sekaligus struk digitalnya.
@@ -41,11 +53,14 @@ type CheckoutResult struct {
 	Receipt *domain.Transaction `json:"receipt,omitempty"`
 }
 
-// OrderService menangani modul kasir dan manajemen pesanan.
+// OrderService menangani modul kasir dan manajemen pesanan, termasuk
+// keterkaitannya dengan pelanggan (CRM) dan meja (denah F&B).
 type OrderService struct {
 	products     domain.ProductRepository
 	orders       domain.OrderRepository
 	transactions domain.TransactionRepository
+	customers    *CustomerService
+	tables       *TableService
 }
 
 // NewOrderService membuat service pesanan.
@@ -53,8 +68,16 @@ func NewOrderService(
 	products domain.ProductRepository,
 	orders domain.OrderRepository,
 	transactions domain.TransactionRepository,
+	customers *CustomerService,
+	tables *TableService,
 ) *OrderService {
-	return &OrderService{products: products, orders: orders, transactions: transactions}
+	return &OrderService{
+		products:     products,
+		orders:       orders,
+		transactions: transactions,
+		customers:    customers,
+		tables:       tables,
+	}
 }
 
 // Checkout mencatat penjualan langsung di kasir: stok berkurang, transaksi
@@ -73,6 +96,18 @@ func (s *OrderService) Checkout(ctx context.Context, tenantID, cashier string, i
 		return nil, apperr.BadRequest("uang yang dibayarkan kurang dari total belanja")
 	}
 
+	// Pelanggan dan meja diselesaikan sebelum transaksi ditulis supaya input
+	// yang salah (mis. meja tidak ada) gagal lebih awal, bukan setelah
+	// penjualan tercatat.
+	customer, err := s.resolveCustomer(ctx, tenantID, in.CustomerID, in.CustomerName, in.CustomerPhone)
+	if err != nil {
+		return nil, err
+	}
+	table, err := s.resolveTable(ctx, tenantID, in.TableID)
+	if err != nil {
+		return nil, err
+	}
+
 	now := timex.Now()
 	order := &domain.Order{
 		ID:            NewOrderID(),
@@ -89,6 +124,8 @@ func (s *OrderService) Checkout(ctx context.Context, tenantID, cashier string, i
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
+	applyCustomer(order, customer)
+	applyTable(order, table)
 
 	lines := buildTransactionLines(order, method, cashier, now)
 	if err := s.transactions.Append(ctx, tenantID, lines); err != nil {
@@ -97,13 +134,82 @@ func (s *OrderService) Checkout(ctx context.Context, tenantID, cashier string, i
 	if err := s.orders.Create(ctx, tenantID, order); err != nil {
 		return nil, err
 	}
-	if err := s.products.AdjustStock(ctx, tenantID, stockDeltas(items, -1)); err != nil {
-		// Penjualan sudah tercatat; kegagalan sinkronisasi stok tidak boleh
-		// membatalkan struk pelanggan.
-		return &CheckoutResult{Order: *order, Receipt: buildReceipt(order, method, cashier, in.AmountPaid)}, nil
-	}
 
-	return &CheckoutResult{Order: *order, Receipt: buildReceipt(order, method, cashier, in.AmountPaid)}, nil
+	// Mulai titik ini penjualan sudah tercatat. Kegagalan sinkronisasi stok,
+	// poin, atau status meja tidak boleh membatalkan struk pelanggan.
+	_ = s.products.AdjustStock(ctx, tenantID, stockDeltas(items, -1))
+	points := s.accrueLoyalty(ctx, tenantID, customer, total, now)
+	s.occupyTable(ctx, tenantID, order)
+
+	return &CheckoutResult{
+		Order:   *order,
+		Receipt: buildReceipt(order, method, cashier, in.AmountPaid, customer, points),
+	}, nil
+}
+
+// resolveCustomer menerjemahkan input kasir menjadi pelanggan terdaftar.
+func (s *OrderService) resolveCustomer(ctx context.Context, tenantID, customerID, name, phone string) (*domain.Customer, error) {
+	if s.customers == nil {
+		return nil, nil
+	}
+	return s.customers.resolveCheckoutCustomer(ctx, tenantID, customerID, name, phone)
+}
+
+// resolveTable memvalidasi meja yang dipilih pada layar kasir.
+func (s *OrderService) resolveTable(ctx context.Context, tenantID, tableID string) (*domain.Table, error) {
+	tableID = strings.TrimSpace(tableID)
+	if tableID == "" || s.tables == nil {
+		return nil, nil
+	}
+	return s.tables.Get(ctx, tenantID, tableID)
+}
+
+// accrueLoyalty menambah poin pelanggan dan mengembalikan poin yang didapat.
+func (s *OrderService) accrueLoyalty(ctx context.Context, tenantID string, customer *domain.Customer, total float64, at time.Time) int {
+	if s.customers == nil || customer == nil {
+		return 0
+	}
+	points := PointsFor(total)
+	if err := s.customers.accrue(ctx, tenantID, customer, total, at); err != nil {
+		// Poin gagal tersimpan bukan alasan menggagalkan transaksi yang sudah
+		// lunas; struk tetap dicetak tanpa keterangan poin.
+		return 0
+	}
+	return points
+}
+
+func (s *OrderService) occupyTable(ctx context.Context, tenantID string, order *domain.Order) {
+	if s.tables == nil || order.TableID == "" {
+		return
+	}
+	_ = s.tables.occupy(ctx, tenantID, order.TableID, order.ID)
+}
+
+func (s *OrderService) releaseTable(ctx context.Context, tenantID string, order *domain.Order) {
+	if s.tables == nil || order.TableID == "" {
+		return
+	}
+	_ = s.tables.release(ctx, tenantID, order.TableID, order.ID)
+}
+
+// applyCustomer menyalin identitas pelanggan ke pesanan.
+func applyCustomer(order *domain.Order, customer *domain.Customer) {
+	if customer == nil {
+		return
+	}
+	order.CustomerID = customer.ID
+	if order.CustomerName == "" {
+		order.CustomerName = customer.Name
+	}
+}
+
+// applyTable menyalin identitas meja ke pesanan.
+func applyTable(order *domain.Order, table *domain.Table) {
+	if table == nil {
+		return
+	}
+	order.TableID = table.ID
+	order.TableNo = table.Name
 }
 
 // CreateOnlineOrder mencatat pesanan dari kanal online. Pesanan ini belum
@@ -115,6 +221,15 @@ func (s *OrderService) CreateOnlineOrder(ctx context.Context, tenantID string, i
 	}
 	if strings.TrimSpace(in.CustomerName) == "" {
 		return nil, apperr.BadRequest("nama pemesan wajib diisi")
+	}
+
+	customer, err := s.resolveCustomer(ctx, tenantID, "", in.CustomerName, in.CustomerPhone)
+	if err != nil {
+		return nil, err
+	}
+	table, err := s.resolveTable(ctx, tenantID, in.TableID)
+	if err != nil {
+		return nil, err
 	}
 
 	now := timex.Now()
@@ -131,12 +246,15 @@ func (s *OrderService) CreateOnlineOrder(ctx context.Context, tenantID string, i
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
+	applyCustomer(order, customer)
+	applyTable(order, table)
+
 	if err := s.orders.Create(ctx, tenantID, order); err != nil {
 		return nil, err
 	}
-	if err := s.products.AdjustStock(ctx, tenantID, stockDeltas(items, -1)); err != nil {
-		return order, nil
-	}
+	// Poin loyalitas baru diberikan saat pembayaran diterima kasir (Settle).
+	_ = s.products.AdjustStock(ctx, tenantID, stockDeltas(items, -1))
+	s.occupyTable(ctx, tenantID, order)
 	return order, nil
 }
 
@@ -195,12 +313,16 @@ func (s *OrderService) UpdateStatus(ctx context.Context, tenantID, orderID, stat
 	if next == domain.OrderStatusBatal && previous != domain.OrderStatusBatal {
 		_ = s.products.AdjustStock(ctx, tenantID, stockDeltas(order.Items, 1))
 	}
+	// Pesanan yang selesai atau batal membebaskan mejanya untuk dibersihkan.
+	if next == domain.OrderStatusSelesai || next == domain.OrderStatusBatal {
+		s.releaseTable(ctx, tenantID, order)
+	}
 	return order, nil
 }
 
 // Settle menyelesaikan pembayaran pesanan yang belum terbayar (umumnya
 // pesanan online) dan menerbitkan struk.
-func (s *OrderService) Settle(ctx context.Context, tenantID, orderID, cashier, paymentMethod string, amountPaid float64) (*CheckoutResult, error) {
+func (s *OrderService) Settle(ctx context.Context, tenantID, orderID, cashier, paymentMethod string, amountPaid float64, customerPhone string) (*CheckoutResult, error) {
 	method := strings.ToLower(strings.TrimSpace(paymentMethod))
 	if !domain.ValidPayment(method) {
 		return nil, apperr.BadRequest("metode pembayaran harus tunai, qris, atau kartu")
@@ -219,10 +341,18 @@ func (s *OrderService) Settle(ctx context.Context, tenantID, orderID, cashier, p
 		return nil, apperr.BadRequest("uang yang dibayarkan kurang dari total pesanan")
 	}
 
+	// Pesanan online bisa saja belum tertaut pelanggan; kasir dapat
+	// melengkapinya saat pembayaran lewat nomor HP.
+	customer, err := s.resolveCustomer(ctx, tenantID, order.CustomerID, order.CustomerName, customerPhone)
+	if err != nil {
+		return nil, err
+	}
+
 	now := timex.Now()
 	order.TransactionID = NewTransactionID()
 	order.Cashier = cashier
 	order.UpdatedAt = now
+	applyCustomer(order, customer)
 
 	if err := s.transactions.Append(ctx, tenantID, buildTransactionLines(order, method, cashier, now)); err != nil {
 		return nil, err
@@ -230,7 +360,12 @@ func (s *OrderService) Settle(ctx context.Context, tenantID, orderID, cashier, p
 	if err := s.orders.Update(ctx, tenantID, order); err != nil {
 		return nil, err
 	}
-	return &CheckoutResult{Order: *order, Receipt: buildReceipt(order, method, cashier, amountPaid)}, nil
+	points := s.accrueLoyalty(ctx, tenantID, customer, order.Total, now)
+
+	return &CheckoutResult{
+		Order:   *order,
+		Receipt: buildReceipt(order, method, cashier, amountPaid, customer, points),
+	}, nil
 }
 
 // resolveItems memvalidasi keranjang terhadap katalog dan menghitung total.
@@ -304,12 +439,12 @@ func buildTransactionLines(o *domain.Order, method, cashier string, at time.Time
 	return lines
 }
 
-func buildReceipt(o *domain.Order, method, cashier string, amountPaid float64) *domain.Transaction {
+func buildReceipt(o *domain.Order, method, cashier string, amountPaid float64, customer *domain.Customer, pointsEarned int) *domain.Transaction {
 	change := 0.0
 	if method == domain.PaymentTunai && amountPaid > o.Total {
 		change = amountPaid - o.Total
 	}
-	return &domain.Transaction{
+	receipt := &domain.Transaction{
 		ID:            o.TransactionID,
 		Date:          o.UpdatedAt,
 		Items:         o.Items,
@@ -319,6 +454,12 @@ func buildReceipt(o *domain.Order, method, cashier string, amountPaid float64) *
 		AmountPaid:    amountPaid,
 		Change:        change,
 	}
+	if customer != nil {
+		receipt.CustomerName = customer.Name
+		receipt.PointsEarned = pointsEarned
+		receipt.TotalPoints = customer.Points
+	}
+	return receipt
 }
 
 // stockDeltas mengubah daftar item menjadi peta perubahan stok. sign -1 untuk

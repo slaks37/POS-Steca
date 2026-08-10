@@ -19,6 +19,8 @@ const (
 	SheetTransactions = "Transactions"
 	SheetOrders       = "Orders"
 	SheetEmployees    = "Employees"
+	SheetCustomers    = "Customers"
+	SheetTables       = "Tables"
 )
 
 var (
@@ -26,10 +28,16 @@ var (
 
 	transactionHeader = []string{"Tanggal", "ID Transaksi", "Item", "Qty", "Harga Satuan", "Total", "Metode Pembayaran", "Kasir"}
 
+	// Kolom "ID Pelanggan" dan "ID Meja" ditambahkan di ujung kanan agar
+	// spreadsheet tenant lama tetap terbaca tanpa migrasi manual.
 	orderHeader = []string{"ID Pesanan", "Kode", "ID Transaksi", "Tanggal", "Diperbarui", "Status", "Sumber",
-		"Nama Pelanggan", "No Meja", "Items (JSON)", "Total", "Catatan", "Kasir"}
+		"Nama Pelanggan", "No Meja", "Items (JSON)", "Total", "Catatan", "Kasir", "ID Pelanggan", "ID Meja"}
 
 	employeeHeader = []string{"ID", "Nama", "Email", "Role", "Status", "PIN Hash", "Dibuat"}
+
+	customerHeader = []string{"ID", "Nama", "No HP", "Total Belanja", "Poin", "Terakhir Belanja", "Dibuat"}
+
+	tableHeader = []string{"ID", "Nama Meja", "Kapasitas", "Status", "Area", "ID Pesanan Aktif", "Diperbarui"}
 )
 
 // SheetSpecs adalah struktur lengkap spreadsheet satu tenant.
@@ -39,6 +47,8 @@ func SheetSpecs() []googleapi.SheetSpec {
 		{Title: SheetTransactions, Header: transactionHeader},
 		{Title: SheetOrders, Header: orderHeader},
 		{Title: SheetEmployees, Header: employeeHeader},
+		{Title: SheetCustomers, Header: customerHeader},
+		{Title: SheetTables, Header: tableHeader},
 	}
 }
 

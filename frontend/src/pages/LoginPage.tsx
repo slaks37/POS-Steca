@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 
-import { ErrorAlert } from '../components/ui'
+import { Brand, ErrorAlert } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { ApiError, request } from '../lib/api'
 import type { User } from '../lib/types'
@@ -100,10 +100,7 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-hero">
-        <div className="row" style={{ gap: 12 }}>
-          <span className="sidebar-logo">S</span>
-          <strong style={{ fontSize: 18 }}>POS Steca</strong>
-        </div>
+        <Brand size="lg" tagline="Point of Sale UMKM" />
         <h2>Kasir modern untuk UMKM Indonesia</h2>
         <p style={{ maxWidth: 460, margin: 0 }}>
           Kelola penjualan, stok, dan pesanan dari satu tempat — tanpa server database. Semua data tercatat rapi di

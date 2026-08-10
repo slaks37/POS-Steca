@@ -40,6 +40,12 @@ func NewProductID() string { return "PRD-" + randomString(8) }
 // NewEmployeeID membuat ID karyawan.
 func NewEmployeeID() string { return "EMP-" + randomString(8) }
 
+// NewCustomerID membuat ID pelanggan.
+func NewCustomerID() string { return "CST-" + randomString(8) }
+
+// NewTableID membuat ID meja.
+func NewTableID() string { return "TBL-" + randomString(6) }
+
 // NewTransactionID membuat ID transaksi berformat TRX-YYYYMMDD-XXXXX agar
 // mudah dicari langsung di Google Sheets.
 func NewTransactionID() string {

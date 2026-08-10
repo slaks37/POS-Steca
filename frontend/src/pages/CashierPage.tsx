@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { CustomerPicker } from '../components/CustomerPicker'
 import { ReceiptView } from '../components/ReceiptView'
-import { EmptyState, ErrorAlert, LoadingRows, Modal } from '../components/ui'
+import { EmptyState, ErrorAlert, LoadingCards, Modal, Toast, tableStatusLabel } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { ApiError, request } from '../lib/api'
 import type { Envelope } from '../lib/api'
 import { formatRupiah } from '../lib/format'
-import type { CheckoutResult, PaymentMethod, Product } from '../lib/types'
+import type { CheckoutResult, Customer, PaymentMethod, Product, Table } from '../lib/types'
 
 interface CartLine {
   product: Product
@@ -21,35 +22,40 @@ const paymentOptions: { value: PaymentMethod; label: string }[] = [
 
 const quickCash = [10000, 20000, 50000, 100000]
 
-/** CashierPage adalah layar transaksi utama kasir. */
+/** CashierPage adalah layar transaksi utama kasir, dioptimalkan untuk tablet. */
 export function CashierPage() {
   const { tenant } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<string[]>([])
+  const [tables, setTables] = useState<Table[]>([])
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const [cart, setCart] = useState<CartLine[]>([])
   const [payment, setPayment] = useState<PaymentMethod>('tunai')
   const [amountPaid, setAmountPaid] = useState('')
+  const [customer, setCustomer] = useState<Customer | null>(null)
   const [customerName, setCustomerName] = useState('')
-  const [tableNo, setTableNo] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [tableId, setTableId] = useState('')
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<CheckoutResult | null>(null)
 
-  const loadProducts = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async () => {
     setError(null)
     try {
-      const [items, cats] = await Promise.all([
+      const [items, cats, tbl] = await Promise.all([
         request<Envelope<Product[]>>('/products'),
         request<Envelope<string[]>>('/products/categories'),
+        request<Envelope<Table[]>>('/tables'),
       ])
       setProducts(items.data ?? [])
       setCategories(cats.data ?? [])
+      setTables(tbl.data ?? [])
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal memuat katalog produk')
     } finally {
@@ -58,8 +64,14 @@ export function CashierPage() {
   }, [])
 
   useEffect(() => {
-    void loadProducts()
-  }, [loadProducts])
+    void load()
+  }, [load])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = window.setTimeout(() => setToast(null), 2600)
+    return () => window.clearTimeout(timer)
+  }, [toast])
 
   const visibleProducts = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -71,9 +83,12 @@ export function CashierPage() {
   }, [products, query, category])
 
   const total = useMemo(() => cart.reduce((sum, line) => sum + line.product.price * line.qty, 0), [cart])
+  const itemCount = cart.reduce((sum, line) => sum + line.qty, 0)
   const paid = Number(amountPaid.replace(/[^\d]/g, '')) || 0
   const change = payment === 'tunai' && paid > total ? paid - total : 0
   const insufficient = payment === 'tunai' && paid > 0 && paid < total
+  const estimatedPoints = Math.floor(total / 10000)
+  const willEarnPoints = Boolean(customer || customerPhone.trim())
 
   function addToCart(product: Product) {
     setCart((current) => {
@@ -91,8 +106,7 @@ export function CashierPage() {
       current
         .map((line) => {
           if (line.product.id !== productId) return line
-          const nextQty = Math.min(Math.max(line.qty + delta, 0), line.product.stock)
-          return { ...line, qty: nextQty }
+          return { ...line, qty: Math.min(Math.max(line.qty + delta, 0), line.product.stock) }
         })
         .filter((line) => line.qty > 0),
     )
@@ -101,8 +115,10 @@ export function CashierPage() {
   function resetCart() {
     setCart([])
     setAmountPaid('')
+    setCustomer(null)
     setCustomerName('')
-    setTableNo('')
+    setCustomerPhone('')
+    setTableId('')
     setNote('')
     setPayment('tunai')
   }
@@ -118,20 +134,37 @@ export function CashierPage() {
           items: cart.map((line) => ({ product_id: line.product.id, qty: line.qty })),
           payment_method: payment,
           amount_paid: payment === 'tunai' ? paid : 0,
-          customer_name: customerName,
-          table_no: tableNo,
+          customer_id: customer?.id ?? '',
+          customer_name: customer?.name ?? customerName,
+          customer_phone: customer ? '' : customerPhone,
+          table_id: tableId,
           note,
         },
       })
       setResult(res.data)
       resetCart()
-      void loadProducts()
+      void load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Transaksi gagal disimpan')
     } finally {
       setSubmitting(false)
     }
   }
+
+  async function markTableClean(table: Table) {
+    try {
+      await request<Envelope<Table>>(`/tables/${table.id}/status`, {
+        method: 'PATCH',
+        body: { status: 'kosong' },
+      })
+      setToast(`${table.name} siap dipakai lagi`)
+      void load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Gagal memperbarui status meja')
+    }
+  }
+
+  const dirtyTables = tables.filter((t) => t.status === 'dibersihkan')
 
   return (
     <div className="pos-layout">
@@ -158,7 +191,7 @@ export function CashierPage() {
                 </option>
               ))}
             </select>
-            <button type="button" className="btn btn-secondary" onClick={() => void loadProducts()}>
+            <button type="button" className="btn btn-secondary" onClick={() => void load()}>
               Muat ulang
             </button>
           </div>
@@ -166,13 +199,37 @@ export function CashierPage() {
 
         <ErrorAlert message={error} />
 
-        {loading ? (
-          <div className="card">
-            <LoadingRows rows={5} />
+        {dirtyTables.length > 0 ? (
+          <div className="card card-pad">
+            <div className="row">
+              <strong className="small">🧹 Meja perlu dibersihkan</strong>
+              {dirtyTables.map((table) => (
+                <button
+                  key={table.id}
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void markTableClean(table)}
+                >
+                  {table.name} • tandai kosong
+                </button>
+              ))}
+            </div>
           </div>
+        ) : null}
+
+        {loading ? (
+          <LoadingCards count={6} tile />
         ) : visibleProducts.length === 0 ? (
           <div className="card">
-            <EmptyState title="Belum ada produk" hint="Tambahkan produk lewat menu Produk & Stok." />
+            <EmptyState
+              icon={products.length === 0 ? '📦' : '🔍'}
+              title={products.length === 0 ? 'Belum ada produk' : 'Produk tidak ditemukan'}
+              hint={
+                products.length === 0
+                  ? 'Tambahkan produk lewat menu Produk agar bisa mulai berjualan.'
+                  : 'Coba kata kunci lain atau ganti filter kategori.'
+              }
+            />
           </div>
         ) : (
           <div className="product-grid">
@@ -187,20 +244,20 @@ export function CashierPage() {
                   onClick={() => addToCart(product)}
                   disabled={habis || inCart >= product.stock}
                 >
-                  {product.image_url ? (
-                    <img className="product-thumb" src={product.image_url} alt={product.name} loading="lazy" />
-                  ) : (
-                    <div className="product-thumb-placeholder" aria-hidden>
-                      {product.name.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+                  <div className="product-thumb-wrap">
+                    {product.image_url ? (
+                      <img className="product-thumb" src={product.image_url} alt={product.name} loading="lazy" />
+                    ) : (
+                      <div className="product-thumb-placeholder" aria-hidden>
+                        {product.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    {inCart > 0 ? <span className="product-qty-flag">{inCart}</span> : null}
+                  </div>
                   <div className="product-body">
                     <span className="product-name">{product.name}</span>
                     <span className="product-price">{formatRupiah(product.price)}</span>
-                    <span className="tiny muted">
-                      {habis ? 'Stok habis' : `Stok ${product.stock}`}
-                      {inCart > 0 ? ` • ${inCart} di keranjang` : ''}
-                    </span>
+                    <span className="tiny muted">{habis ? 'Stok habis' : `Stok ${product.stock}`}</span>
                   </div>
                 </button>
               )
@@ -211,7 +268,7 @@ export function CashierPage() {
 
       <div className="card cart">
         <div className="card-header">
-          <h3>Keranjang</h3>
+          <h3>Keranjang {itemCount > 0 ? <span className="badge">{itemCount}</span> : null}</h3>
           {cart.length > 0 ? (
             <button type="button" className="btn btn-ghost btn-sm" onClick={resetCart}>
               Kosongkan
@@ -221,7 +278,7 @@ export function CashierPage() {
 
         <div className="cart-items">
           {cart.length === 0 ? (
-            <EmptyState title="Keranjang kosong" hint="Pilih produk di sebelah kiri untuk mulai transaksi." />
+            <EmptyState icon="🛒" title="Keranjang kosong" hint="Ketuk produk di sebelah kiri untuk menambahkan." />
           ) : (
             cart.map((line) => (
               <div className="cart-item" key={line.product.id}>
@@ -229,7 +286,7 @@ export function CashierPage() {
                   <div style={{ fontWeight: 600 }}>{line.product.name}</div>
                   <div className="tiny muted">{formatRupiah(line.product.price)} / item</div>
                 </div>
-                <div style={{ textAlign: 'right', fontWeight: 650 }}>
+                <div style={{ textAlign: 'right', fontWeight: 650 }} className="num">
                   {formatRupiah(line.product.price * line.qty)}
                 </div>
                 <div className="qty-control">
@@ -252,33 +309,67 @@ export function CashierPage() {
         </div>
 
         <div className="cart-summary">
-          <div className="field-row">
-            <div className="field" style={{ marginBottom: 8 }}>
-              <label htmlFor="customer">Nama pelanggan</label>
-              <input id="customer" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Opsional" />
-            </div>
-            <div className="field" style={{ marginBottom: 8 }}>
-              <label htmlFor="table">No. meja</label>
-              <input id="table" value={tableNo} onChange={(e) => setTableNo(e.target.value)} placeholder="Opsional" />
-            </div>
+          <div className="field">
+            <label>Pelanggan</label>
+            <CustomerPicker
+              selected={customer}
+              onSelect={setCustomer}
+              name={customerName}
+              phone={customerPhone}
+              onNameChange={setCustomerName}
+              onPhoneChange={setCustomerPhone}
+            />
           </div>
 
-          <label>Metode pembayaran</label>
-          <div className="pay-methods">
-            {paymentOptions.map((option) => (
-              <button
-                type="button"
-                key={option.value}
-                className={`pay-method${payment === option.value ? ' active' : ''}`}
-                onClick={() => setPayment(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
+          {tables.length > 0 ? (
+            <div className="field">
+              <label>Meja</label>
+              <div className="table-chips">
+                <button
+                  type="button"
+                  className={`table-chip${tableId === '' ? ' active' : ''}`}
+                  onClick={() => setTableId('')}
+                >
+                  Tanpa meja
+                  <span className="cap">bawa pulang</span>
+                </button>
+                {tables.map((table) => (
+                  <button
+                    key={table.id}
+                    type="button"
+                    className={`table-chip is-${table.status}${tableId === table.id ? ' active' : ''}`}
+                    onClick={() => setTableId(table.id === tableId ? '' : table.id)}
+                    title={tableStatusLabel(table.status)}
+                  >
+                    {table.name}
+                    <span className="cap">
+                      {table.capacity > 0 ? `${table.capacity} kursi • ` : ''}
+                      {tableStatusLabel(table.status)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="field">
+            <label>Metode pembayaran</label>
+            <div className="choice-grid">
+              {paymentOptions.map((option) => (
+                <button
+                  type="button"
+                  key={option.value}
+                  className={`choice${payment === option.value ? ' active' : ''}`}
+                  onClick={() => setPayment(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {payment === 'tunai' ? (
-            <div className="field" style={{ marginBottom: 8 }}>
+            <div className="field">
               <label htmlFor="paid">Uang diterima</label>
               <input
                 id="paid"
@@ -287,7 +378,7 @@ export function CashierPage() {
                 onChange={(e) => setAmountPaid(e.target.value)}
                 placeholder="0"
               />
-              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+              <div className="row row-tight" style={{ marginTop: 8 }}>
                 {quickCash.map((amount) => (
                   <button
                     type="button"
@@ -304,20 +395,23 @@ export function CashierPage() {
               </div>
             </div>
           ) : (
-            <div className="alert alert-info small" style={{ marginBottom: 8 }}>
-              {payment === 'qris' ? 'QRIS' : 'Kartu'} masih placeholder: transaksi dicatat lunas tanpa memanggil
-              payment gateway.
+            <div className="alert alert-info small">
+              <span aria-hidden>ℹ️</span>
+              <span>
+                {payment === 'qris' ? 'QRIS' : 'Kartu'} masih placeholder: transaksi dicatat lunas tanpa memanggil
+                payment gateway.
+              </span>
             </div>
           )}
 
-          <div className="field" style={{ marginBottom: 10 }}>
+          <div className="field">
             <label htmlFor="note">Catatan pesanan</label>
             <input id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Misal: tanpa sambal" />
           </div>
 
           <div className="summary-row">
             <span className="muted">Jumlah item</span>
-            <span>{cart.reduce((sum, line) => sum + line.qty, 0)}</span>
+            <span className="num">{itemCount}</span>
           </div>
           <div className="summary-row">
             <span className="muted">Total</span>
@@ -326,20 +420,36 @@ export function CashierPage() {
           {payment === 'tunai' && paid > 0 ? (
             <div className="summary-row">
               <span className="muted">Kembalian</span>
-              <span style={{ fontWeight: 700, color: insufficient ? 'var(--danger)' : 'var(--success)' }}>
+              <span
+                className="num"
+                style={{ fontWeight: 700, color: insufficient ? 'var(--danger)' : 'var(--success)' }}
+              >
                 {insufficient ? 'Uang kurang' : formatRupiah(change)}
               </span>
+            </div>
+          ) : null}
+          {willEarnPoints && estimatedPoints > 0 ? (
+            <div className="summary-row">
+              <span className="muted">Poin loyalitas</span>
+              <span className="badge badge-loyal">+{estimatedPoints} poin</span>
             </div>
           ) : null}
 
           <button
             type="button"
-            className="btn btn-block"
-            style={{ marginTop: 10 }}
+            className="btn btn-lg btn-block"
+            style={{ marginTop: 12 }}
             disabled={cart.length === 0 || submitting || insufficient}
             onClick={() => void handleCheckout()}
           >
-            {submitting ? 'Menyimpan...' : `Bayar ${formatRupiah(total)}`}
+            {submitting ? (
+              <>
+                <span className="spinner spinner-light" />
+                Menyimpan...
+              </>
+            ) : (
+              `Bayar ${formatRupiah(total)}`
+            )}
           </button>
         </div>
       </div>
@@ -362,10 +472,12 @@ export function CashierPage() {
           <ReceiptView
             receipt={result.receipt}
             order={result.order}
-            businessName={tenant?.business_name ?? 'POS Steca'}
+            businessName={tenant?.business_name ?? 'Steca POS'}
           />
         </Modal>
       ) : null}
+
+      {toast ? <Toast message={toast} /> : null}
     </div>
   )
 }

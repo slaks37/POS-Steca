@@ -21,6 +21,8 @@ type Deps struct {
 	Orders    *service.OrderService
 	Reports   *service.ReportService
 	Employees *service.EmployeeService
+	Customers *service.CustomerService
+	Tables    *service.TableService
 	Tenants   domain.TenantStore
 
 	// MemoryStore hanya terisi pada mode datastore memory, untuk melayani
@@ -51,6 +53,8 @@ func NewRouter(d Deps) *gin.Engine {
 	orderHandler := NewOrderHandler(d.Orders)
 	reportHandler := NewReportHandler(d.Reports, d.Auth)
 	employeeHandler := NewEmployeeHandler(d.Employees)
+	customerHandler := NewCustomerHandler(d.Customers)
+	tableHandler := NewTableHandler(d.Tables)
 	publicHandler := NewPublicHandler(d.Tenants, d.Products, d.Orders)
 
 	api := r.Group("/api/v1")
@@ -107,7 +111,17 @@ func NewRouter(d Deps) *gin.Engine {
 		secured.PATCH("/orders/:id/status", orderHandler.UpdateStatus)
 		secured.POST("/orders/:id/settle", orderHandler.Settle)
 
-		// Laporan, dashboard, dan karyawan: khusus owner.
+		// Pelanggan: kasir perlu mencari dan mendaftarkan pelanggan saat
+		// transaksi, tetapi hanya owner yang boleh mengubah dan menghapus.
+		secured.GET("/customers", customerHandler.List)
+		secured.GET("/customers/:id", customerHandler.Get)
+		secured.POST("/customers", customerHandler.Create)
+
+		// Meja: kasir melihat denah dan mengubah status, owner mengelola.
+		secured.GET("/tables", tableHandler.List)
+		secured.PATCH("/tables/:id/status", tableHandler.UpdateStatus)
+
+		// Laporan, dashboard, karyawan, dan data master: khusus owner.
 		owner := secured.Group("", RequireRole(domain.RoleOwner))
 		{
 			owner.GET("/dashboard", reportHandler.Dashboard)
@@ -117,6 +131,12 @@ func NewRouter(d Deps) *gin.Engine {
 			owner.POST("/employees", employeeHandler.Create)
 			owner.PUT("/employees/:id", employeeHandler.Update)
 			owner.DELETE("/employees/:id", employeeHandler.Delete)
+			owner.GET("/customers/:id/history", customerHandler.History)
+			owner.PUT("/customers/:id", customerHandler.Update)
+			owner.DELETE("/customers/:id", customerHandler.Delete)
+			owner.POST("/tables", tableHandler.Create)
+			owner.PUT("/tables/:id", tableHandler.Update)
+			owner.DELETE("/tables/:id", tableHandler.Delete)
 		}
 	}
 

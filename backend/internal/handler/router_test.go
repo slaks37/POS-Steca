@@ -27,10 +27,14 @@ func newTestServer(t *testing.T) (*gin.Engine, *service.AuthService, string) {
 	products := memory.NewProductRepo(store)
 	orders := memory.NewOrderRepo(store)
 	transactions := memory.NewTransactionRepo(store)
+	customers := memory.NewCustomerRepo(store)
+	tables := memory.NewTableRepo(store)
 	storage := memory.NewStorage(store)
 
 	auth := service.NewAuthService(store, employees, store, nil, "rahasia-uji", time.Hour)
-	demo := service.NewDemoService(store, employees, products, store, auth)
+	demo := service.NewDemoService(store, employees, products, tables, store, auth)
+	customerSvc := service.NewCustomerService(customers, orders)
+	tableSvc := service.NewTableService(tables, orders)
 
 	cfg := &config.Config{
 		Port:        "8080",
@@ -45,9 +49,11 @@ func newTestServer(t *testing.T) (*gin.Engine, *service.AuthService, string) {
 		Auth:        auth,
 		Demo:        demo,
 		Products:    service.NewProductService(products, storage),
-		Orders:      service.NewOrderService(products, orders, transactions),
+		Orders:      service.NewOrderService(products, orders, transactions, customerSvc, tableSvc),
 		Reports:     service.NewReportService(transactions, products, orders),
 		Employees:   service.NewEmployeeService(employees, store),
+		Customers:   customerSvc,
+		Tables:      tableSvc,
 		Tenants:     store,
 		MemoryStore: store,
 	})

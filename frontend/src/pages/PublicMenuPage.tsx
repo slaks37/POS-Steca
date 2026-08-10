@@ -138,7 +138,7 @@ export function PublicMenuPage() {
 
       {menu.length === 0 ? (
         <div className="card">
-          <EmptyState title="Menu belum tersedia" hint="Silakan hubungi kasir untuk memesan." />
+          <EmptyState icon="🍽️" title="Menu belum tersedia" hint="Silakan hubungi kasir untuk memesan." />
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="stack">

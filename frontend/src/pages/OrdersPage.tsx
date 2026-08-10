@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { ReceiptView } from '../components/ReceiptView'
-import { EmptyState, ErrorAlert, LoadingRows, Modal, StatusBadge } from '../components/ui'
+import { EmptyState, ErrorAlert, LoadingCards, Modal, StatusBadge } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { ApiError, request } from '../lib/api'
 import type { Envelope } from '../lib/api'
@@ -29,6 +29,7 @@ export function OrdersPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [settling, setSettling] = useState<Order | null>(null)
   const [settlePayment, setSettlePayment] = useState<PaymentMethod>('tunai')
+  const [settlePhone, setSettlePhone] = useState('')
   const [receipt, setReceipt] = useState<CheckoutResult | null>(null)
 
   const load = useCallback(async () => {
@@ -81,9 +82,14 @@ export function OrdersPage() {
     try {
       const res = await request<Envelope<CheckoutResult>>(`/orders/${settling.id}/settle`, {
         method: 'POST',
-        body: { payment_method: settlePayment, amount_paid: settling.total },
+        body: {
+          payment_method: settlePayment,
+          amount_paid: settling.total,
+          customer_phone: settlePhone,
+        },
       })
       setSettling(null)
+      setSettlePhone('')
       setReceipt(res.data)
       await load()
     } catch (err) {
@@ -95,8 +101,9 @@ export function OrdersPage() {
 
   if (loading) {
     return (
-      <div className="card">
-        <LoadingRows rows={6} />
+      <div className="stack">
+        <div className="skeleton skeleton-card" />
+        <LoadingCards count={3} tile />
       </div>
     )
   }
@@ -137,7 +144,7 @@ export function OrdersPage() {
             </header>
 
             {grouped[col.status].length === 0 ? (
-              <EmptyState title="Tidak ada pesanan" />
+              <EmptyState icon="🍽️" title="Tidak ada pesanan" hint="Pesanan baru akan muncul di sini." />
             ) : (
               grouped[col.status].map((order) => (
                 <article className="order-card" key={order.id}>
@@ -147,9 +154,15 @@ export function OrdersPage() {
                   </div>
                   <div className="tiny muted">
                     {formatTime(order.created_at)} • {sourceLabels[order.source] ?? order.source}
-                    {order.table_no ? ` • Meja ${order.table_no}` : ''}
                   </div>
-                  {order.customer_name ? <div className="small">👤 {order.customer_name}</div> : null}
+                  <div className="row row-tight" style={{ marginTop: 4 }}>
+                    {order.table_no ? <span className="badge badge-terisi">🪑 {order.table_no}</span> : null}
+                    {order.customer_name ? (
+                      <span className={`badge${order.customer_id ? ' badge-loyal' : ''}`}>
+                        {order.customer_id ? '💳' : '👤'} {order.customer_name}
+                      </span>
+                    ) : null}
+                  </div>
 
                   <ul className="order-items" style={{ paddingLeft: 18, margin: '8px 0' }}>
                     {order.items.map((item, i) => (
@@ -176,6 +189,7 @@ export function OrdersPage() {
                         onClick={() => {
                           setSettling(order)
                           setSettlePayment('tunai')
+                          setSettlePhone('')
                         }}
                       >
                         Terima bayar
@@ -262,12 +276,12 @@ export function OrdersPage() {
             </div>
             <div>
               <label>Metode pembayaran</label>
-              <div className="pay-methods">
+              <div className="choice-grid">
                 {(['tunai', 'qris', 'kartu'] as PaymentMethod[]).map((method) => (
                   <button
                     type="button"
                     key={method}
-                    className={`pay-method${settlePayment === method ? ' active' : ''}`}
+                    className={`choice${settlePayment === method ? ' active' : ''}`}
                     onClick={() => setSettlePayment(method)}
                   >
                     {method.toUpperCase()}
@@ -275,6 +289,19 @@ export function OrdersPage() {
                 ))}
               </div>
             </div>
+            {settling.customer_id ? null : (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label htmlFor="settle-phone">No. HP pelanggan (opsional)</label>
+                <input
+                  id="settle-phone"
+                  inputMode="tel"
+                  value={settlePhone}
+                  onChange={(e) => setSettlePhone(e.target.value)}
+                  placeholder="08xxxxxxxxxx"
+                />
+                <div className="hint">Isi untuk mengumpulkan poin loyalitas atas pesanan ini.</div>
+              </div>
+            )}
           </div>
         </Modal>
       ) : null}
@@ -297,7 +324,7 @@ export function OrdersPage() {
           <ReceiptView
             receipt={receipt.receipt}
             order={receipt.order}
-            businessName={tenant?.business_name ?? 'POS Steca'}
+            businessName={tenant?.business_name ?? 'Steca POS'}
           />
         </Modal>
       ) : null}

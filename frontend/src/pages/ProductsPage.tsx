@@ -166,8 +166,16 @@ export function ProductsPage() {
           <LoadingRows rows={5} />
         ) : visible.length === 0 ? (
           <EmptyState
+            icon="📦"
             title="Belum ada produk"
-            hint={isOwner ? 'Klik "Tambah produk" untuk mengisi katalog.' : 'Minta pemilik menambahkan produk.'}
+            hint={isOwner ? 'Isi katalog agar produk bisa dijual di kasir.' : 'Minta pemilik menambahkan produk.'}
+            action={
+              isOwner ? (
+                <button type="button" className="btn btn-sm" onClick={openCreate}>
+                  Tambah produk
+                </button>
+              ) : null
+            }
           />
         ) : (
           <div className="table-scroll">

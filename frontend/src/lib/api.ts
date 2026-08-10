@@ -1,4 +1,4 @@
-// Klien REST tipis untuk backend POS Steca.
+// Klien REST tipis untuk backend Steca POS.
 
 const TOKEN_KEY = 'pos_steca_token'
 

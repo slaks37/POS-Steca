@@ -26,6 +26,8 @@ type Store struct {
 	txLines   map[string][]domain.TransactionLine
 	orders    map[string][]domain.Order
 	employees map[string][]domain.Employee
+	customers map[string][]domain.Customer
+	tables    map[string][]domain.Table
 	files     map[string]map[string]storedFile
 
 	fileBaseURL string
@@ -46,6 +48,8 @@ func NewStore(fileBaseURL string) *Store {
 		txLines:     map[string][]domain.TransactionLine{},
 		orders:      map[string][]domain.Order{},
 		employees:   map[string][]domain.Employee{},
+		customers:   map[string][]domain.Customer{},
+		tables:      map[string][]domain.Table{},
 		files:       map[string]map[string]storedFile{},
 		fileBaseURL: strings.TrimSuffix(fileBaseURL, "/"),
 	}
@@ -378,6 +382,140 @@ func (s *Store) DeleteEmployee(_ context.Context, tenantID, employeeID string) e
 		}
 	}
 	return apperr.NotFound("karyawan tidak ditemukan")
+}
+
+// ---------- CustomerRepository ----------
+
+// ListCustomers mengembalikan pelanggan tenant.
+func (s *Store) ListCustomers(_ context.Context, tenantID string) ([]domain.Customer, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Customer, len(s.customers[tenantID]))
+	copy(out, s.customers[tenantID])
+	return out, nil
+}
+
+// GetCustomer mencari pelanggan berdasarkan ID.
+func (s *Store) GetCustomer(ctx context.Context, tenantID, customerID string) (*domain.Customer, error) {
+	items, _ := s.ListCustomers(ctx, tenantID)
+	for i := range items {
+		if items[i].ID == customerID {
+			c := items[i]
+			return &c, nil
+		}
+	}
+	return nil, apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+// GetCustomerByPhone mencari pelanggan berdasarkan nomor HP.
+func (s *Store) GetCustomerByPhone(ctx context.Context, tenantID, phone string) (*domain.Customer, error) {
+	phone = domain.NormalizePhone(phone)
+	if phone == "" {
+		return nil, apperr.NotFound("pelanggan tidak ditemukan")
+	}
+	items, _ := s.ListCustomers(ctx, tenantID)
+	for i := range items {
+		if domain.NormalizePhone(items[i].Phone) == phone {
+			c := items[i]
+			return &c, nil
+		}
+	}
+	return nil, apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+// CreateCustomer menambahkan pelanggan.
+func (s *Store) CreateCustomer(_ context.Context, tenantID string, c *domain.Customer) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.customers[tenantID] = append(s.customers[tenantID], *c)
+	return nil
+}
+
+// UpdateCustomer memperbarui pelanggan.
+func (s *Store) UpdateCustomer(_ context.Context, tenantID string, c *domain.Customer) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.customers[tenantID]
+	for i := range list {
+		if list[i].ID == c.ID {
+			list[i] = *c
+			return nil
+		}
+	}
+	return apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+// DeleteCustomer menghapus pelanggan.
+func (s *Store) DeleteCustomer(_ context.Context, tenantID, customerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.customers[tenantID]
+	for i := range list {
+		if list[i].ID == customerID {
+			s.customers[tenantID] = append(list[:i], list[i+1:]...)
+			return nil
+		}
+	}
+	return apperr.NotFound("pelanggan tidak ditemukan")
+}
+
+// ---------- TableRepository ----------
+
+// ListTables mengembalikan meja tenant.
+func (s *Store) ListTables(_ context.Context, tenantID string) ([]domain.Table, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Table, len(s.tables[tenantID]))
+	copy(out, s.tables[tenantID])
+	return out, nil
+}
+
+// GetTable mencari meja berdasarkan ID.
+func (s *Store) GetTable(ctx context.Context, tenantID, tableID string) (*domain.Table, error) {
+	items, _ := s.ListTables(ctx, tenantID)
+	for i := range items {
+		if items[i].ID == tableID {
+			tb := items[i]
+			return &tb, nil
+		}
+	}
+	return nil, apperr.NotFound("meja tidak ditemukan")
+}
+
+// CreateTable menambahkan meja.
+func (s *Store) CreateTable(_ context.Context, tenantID string, tb *domain.Table) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tables[tenantID] = append(s.tables[tenantID], *tb)
+	return nil
+}
+
+// UpdateTable memperbarui meja.
+func (s *Store) UpdateTable(_ context.Context, tenantID string, tb *domain.Table) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.tables[tenantID]
+	for i := range list {
+		if list[i].ID == tb.ID {
+			list[i] = *tb
+			return nil
+		}
+	}
+	return apperr.NotFound("meja tidak ditemukan")
+}
+
+// DeleteTable menghapus meja.
+func (s *Store) DeleteTable(_ context.Context, tenantID, tableID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.tables[tenantID]
+	for i := range list {
+		if list[i].ID == tableID {
+			s.tables[tenantID] = append(list[:i], list[i+1:]...)
+			return nil
+		}
+	}
+	return apperr.NotFound("meja tidak ditemukan")
 }
 
 // ---------- FileStorage ----------

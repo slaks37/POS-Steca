@@ -80,7 +80,10 @@ func (c *SheetsClient) EnsureSheets(ctx context.Context, specs []SheetSpec) erro
 		}
 	}
 
-	// Tulis header untuk sheet yang masih kosong.
+	// Tulis header untuk sheet yang masih kosong, dan lengkapi header lama
+	// yang kolomnya lebih sedikit dari spesifikasi sekarang (mis. setelah
+	// aplikasi menambah kolom baru). Kolom hanya pernah ditambahkan di ujung
+	// kanan, jadi menimpa baris header tidak menggeser data yang ada.
 	for _, spec := range specs {
 		if len(spec.Header) == 0 {
 			continue
@@ -89,7 +92,7 @@ func (c *SheetsClient) EnsureSheets(ctx context.Context, specs []SheetSpec) erro
 		if err != nil {
 			return err
 		}
-		if len(rows) > 0 && len(rows[0]) > 0 {
+		if len(rows) > 0 && len(rows[0]) >= len(spec.Header) {
 			continue
 		}
 		header := make([]any, len(spec.Header))

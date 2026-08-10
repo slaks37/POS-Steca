@@ -5,6 +5,7 @@ import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { CashierPage } from './pages/CashierPage'
+import { CustomersPage } from './pages/CustomersPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EmployeesPage } from './pages/EmployeesPage'
 import { LoginPage } from './pages/LoginPage'
@@ -12,6 +13,7 @@ import { OrdersPage } from './pages/OrdersPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { PublicMenuPage } from './pages/PublicMenuPage'
 import { ReportsPage } from './pages/ReportsPage'
+import { TablesPage } from './pages/TablesPage'
 import { SettingsPage } from './pages/SettingsPage'
 
 function FullScreenLoader() {
@@ -68,7 +70,16 @@ export default function App() {
             />
             <Route path="/kasir" element={<CashierPage />} />
             <Route path="/pesanan" element={<OrdersPage />} />
+            <Route path="/meja" element={<TablesPage />} />
             <Route path="/produk" element={<ProductsPage />} />
+            <Route
+              path="/pelanggan"
+              element={
+                <RequireAuth ownerOnly>
+                  <CustomersPage />
+                </RequireAuth>
+              }
+            />
             <Route
               path="/laporan"
               element={

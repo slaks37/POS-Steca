@@ -121,7 +121,16 @@ export function EmployeesPage() {
         {loading ? (
           <LoadingRows rows={4} />
         ) : employees.length === 0 ? (
-          <EmptyState title="Belum ada karyawan" />
+          <EmptyState
+            icon="👥"
+            title="Belum ada karyawan"
+            hint="Tambahkan kasir agar mereka bisa masuk dengan PIN sendiri."
+            action={
+              <button type="button" className="btn btn-sm" onClick={openCreate}>
+                Tambah karyawan
+              </button>
+            }
+          />
         ) : (
           <div className="table-scroll">
             <table className="table">

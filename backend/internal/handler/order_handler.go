@@ -94,6 +94,7 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 type settleRequest struct {
 	PaymentMethod string  `json:"payment_method"`
 	AmountPaid    float64 `json:"amount_paid"`
+	CustomerPhone string  `json:"customer_phone"`
 }
 
 // Settle menyelesaikan pembayaran pesanan online di kasir.
@@ -106,7 +107,10 @@ func (h *OrderHandler) Settle(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	result, err := h.orders.Settle(c.Request.Context(), p.TenantID, c.Param("id"), p.Name, req.PaymentMethod, req.AmountPaid)
+	result, err := h.orders.Settle(
+		c.Request.Context(), p.TenantID, c.Param("id"), p.Name,
+		req.PaymentMethod, req.AmountPaid, req.CustomerPhone,
+	)
 	if err != nil {
 		respondError(c, err)
 		return

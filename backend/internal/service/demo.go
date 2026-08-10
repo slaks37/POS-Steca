@@ -16,6 +16,7 @@ type DemoService struct {
 	tenants   domain.TenantStore
 	employees domain.EmployeeRepository
 	products  domain.ProductRepository
+	tables    domain.TableRepository
 	prov      domain.Provisioner
 	auth      *AuthService
 }
@@ -25,10 +26,18 @@ func NewDemoService(
 	tenants domain.TenantStore,
 	employees domain.EmployeeRepository,
 	products domain.ProductRepository,
+	tables domain.TableRepository,
 	prov domain.Provisioner,
 	auth *AuthService,
 ) *DemoService {
-	return &DemoService{tenants: tenants, employees: employees, products: products, prov: prov, auth: auth}
+	return &DemoService{
+		tenants:   tenants,
+		employees: employees,
+		products:  products,
+		tables:    tables,
+		prov:      prov,
+		auth:      auth,
+	}
 }
 
 var demoProducts = []struct {
@@ -48,6 +57,19 @@ var demoProducts = []struct {
 	{"Air Mineral 600ml", "Minuman", 5000, 4, "MNM-004"},
 	{"Pisang Goreng Keju", "Camilan", 15000, 25, "CML-001"},
 	{"Kentang Goreng", "Camilan", 17000, 3, "CML-002"},
+}
+
+var demoTables = []struct {
+	Name     string
+	Capacity int
+	Area     string
+}{
+	{"Meja 1", 2, "Indoor"},
+	{"Meja 2", 4, "Indoor"},
+	{"Meja 3", 4, "Indoor"},
+	{"Meja 4", 6, "Indoor"},
+	{"Meja 5", 2, "Outdoor"},
+	{"Meja 6", 4, "Outdoor"},
 }
 
 // Bootstrap membuat (atau memakai ulang) tenant demo dan menerbitkan token
@@ -132,6 +154,19 @@ func (s *DemoService) seed(ctx context.Context, tenant *domain.Tenant) error {
 			SKU:      p.SKU,
 		}
 		if err := s.products.Create(ctx, tenant.ID, item); err != nil {
+			return err
+		}
+	}
+	for _, tb := range demoTables {
+		item := &domain.Table{
+			ID:        NewTableID(),
+			Name:      tb.Name,
+			Capacity:  tb.Capacity,
+			Area:      tb.Area,
+			Status:    domain.TableStatusKosong,
+			UpdatedAt: timex.Now(),
+		}
+		if err := s.tables.Create(ctx, tenant.ID, item); err != nil {
 			return err
 		}
 	}

@@ -144,6 +144,8 @@ func orderFromRow(row []string, rowNumber int) domain.Order {
 		Total:         parseFloat(cell(row, 10)),
 		Note:          cell(row, 11),
 		Cashier:       cell(row, 12),
+		CustomerID:    cell(row, 13),
+		TableID:       cell(row, 14),
 		RowNumber:     rowNumber,
 	}
 }
@@ -156,7 +158,53 @@ func orderToRow(o domain.Order) []any {
 	return []any{
 		o.ID, o.Code, o.TransactionID, timex.Format(o.CreatedAt), timex.Format(o.UpdatedAt),
 		string(o.Status), string(o.Source), o.CustomerName, o.TableNo, string(items),
-		o.Total, o.Note, o.Cashier,
+		o.Total, o.Note, o.Cashier, o.CustomerID, o.TableID,
+	}
+}
+
+// customerFromRow memetakan satu baris sheet "Customers".
+func customerFromRow(row []string, rowNumber int) domain.Customer {
+	return domain.Customer{
+		ID:           cell(row, 0),
+		Name:         cell(row, 1),
+		Phone:        cell(row, 2),
+		TotalSpent:   parseFloat(cell(row, 3)),
+		Points:       parseInt(cell(row, 4)),
+		LastPurchase: timex.Parse(cell(row, 5)),
+		CreatedAt:    timex.Parse(cell(row, 6)),
+		RowNumber:    rowNumber,
+	}
+}
+
+func customerToRow(c domain.Customer) []any {
+	return []any{
+		c.ID, c.Name, c.Phone, c.TotalSpent, c.Points,
+		timex.Format(c.LastPurchase), timex.Format(c.CreatedAt),
+	}
+}
+
+// tableFromRow memetakan satu baris sheet "Tables".
+func tableFromRow(row []string, rowNumber int) domain.Table {
+	status := domain.TableStatus(strings.ToLower(cell(row, 3)))
+	if !status.Valid() {
+		status = domain.TableStatusKosong
+	}
+	return domain.Table{
+		ID:            cell(row, 0),
+		Name:          cell(row, 1),
+		Capacity:      parseInt(cell(row, 2)),
+		Status:        status,
+		Area:          cell(row, 4),
+		ActiveOrderID: cell(row, 5),
+		UpdatedAt:     timex.Parse(cell(row, 6)),
+		RowNumber:     rowNumber,
+	}
+}
+
+func tableToRow(tb domain.Table) []any {
+	return []any{
+		tb.ID, tb.Name, tb.Capacity, string(tb.Status), tb.Area,
+		tb.ActiveOrderID, timex.Format(tb.UpdatedAt),
 	}
 }
 

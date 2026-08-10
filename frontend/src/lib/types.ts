@@ -1,9 +1,38 @@
-// Tipe data yang dikirim backend POS Steca (REST API /api/v1).
+// Tipe data yang dikirim backend Steca POS (REST API /api/v1).
 
 export type Role = 'owner' | 'kasir'
 export type OrderStatus = 'baru' | 'diproses' | 'selesai' | 'batal'
 export type OrderSource = 'kasir' | 'online'
 export type PaymentMethod = 'tunai' | 'qris' | 'kartu'
+export type TableStatus = 'kosong' | 'terisi' | 'dibersihkan'
+
+/** Customer adalah pelanggan pada program loyalitas. */
+export interface Customer {
+  id: string
+  name: string
+  phone: string
+  total_spent: number
+  points: number
+  last_purchase: string
+  created_at: string
+}
+
+/** CustomerHistory memuat pelanggan beserta riwayat pesanannya. */
+export interface CustomerHistory {
+  customer: Customer
+  orders: Order[]
+}
+
+/** Table adalah satu meja pada denah bisnis F&B. */
+export interface Table {
+  id: string
+  name: string
+  capacity: number
+  status: TableStatus
+  area: string
+  active_order_id: string
+  updated_at: string
+}
 
 export interface User {
   user_id: string
@@ -57,6 +86,8 @@ export interface Order {
   cashier: string
   created_at: string
   updated_at: string
+  customer_id: string
+  table_id: string
 }
 
 export interface Receipt {
@@ -68,6 +99,9 @@ export interface Receipt {
   cashier: string
   amount_paid?: number
   change?: number
+  customer_name?: string
+  points_earned?: number
+  total_points?: number
 }
 
 export interface CheckoutResult {

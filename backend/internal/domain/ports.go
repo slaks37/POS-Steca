@@ -54,6 +54,25 @@ type OrderFilter struct {
 	To     time.Time
 }
 
+// CustomerRepository memetakan sheet "Customers" milik satu tenant.
+type CustomerRepository interface {
+	List(ctx context.Context, tenantID string) ([]Customer, error)
+	Get(ctx context.Context, tenantID, customerID string) (*Customer, error)
+	GetByPhone(ctx context.Context, tenantID, phone string) (*Customer, error)
+	Create(ctx context.Context, tenantID string, c *Customer) error
+	Update(ctx context.Context, tenantID string, c *Customer) error
+	Delete(ctx context.Context, tenantID, customerID string) error
+}
+
+// TableRepository memetakan sheet "Tables" milik satu tenant.
+type TableRepository interface {
+	List(ctx context.Context, tenantID string) ([]Table, error)
+	Get(ctx context.Context, tenantID, tableID string) (*Table, error)
+	Create(ctx context.Context, tenantID string, tb *Table) error
+	Update(ctx context.Context, tenantID string, tb *Table) error
+	Delete(ctx context.Context, tenantID, tableID string) error
+}
+
 // EmployeeRepository memetakan sheet "Employees" milik satu tenant.
 type EmployeeRepository interface {
 	List(ctx context.Context, tenantID string) ([]Employee, error)

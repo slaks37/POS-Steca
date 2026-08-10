@@ -1,4 +1,4 @@
-# POS Steca
+# Steca POS
 
 Aplikasi **Point of Sale untuk UMKM Indonesia** — terinspirasi kombinasi Majoo, Moka POS,
 dan modul manajemen pesanan F&B ala Trofi.
@@ -41,6 +41,8 @@ spreadsheet dibuat otomatis saat onboarding, dan datanya tetap sepenuhnya milik 
 | **Manajemen pesanan (ala Trofi)** | Papan `baru → diproses → selesai`, sumber pesanan `kasir langsung` atau `online`, pembatalan mengembalikan stok. |
 | **Inventori/produk** | CRUD produk yang sinkron dengan sheet `Products`, termasuk unggah foto produk ke folder Drive tenant. |
 | **Laporan penjualan** | Dibaca dari sheet `Transactions`: harian/mingguan/bulanan, produk terlaris, total omzet, metode pembayaran, performa kasir. |
+| **CRM & loyalitas** | Sheet `Customers` per tenant. Kasir boleh menautkan pelanggan saat checkout — opsional, transaksi anonim tetap sah. Poin terkumpul otomatis 1 poin per Rp 10.000 belanja, dan owner punya halaman pelanggan lengkap dengan riwayat pembelian. |
+| **Denah / nomor meja** | Sheet `Tables` berisi nomor/nama meja dan kapasitasnya. Status `kosong / terisi / perlu dibersihkan` terlihat di layar kasir dan papan pesanan, dan setiap transaksi bisa dikaitkan ke meja tertentu. |
 | **Karyawan** | Role `owner` dan `kasir` dengan level akses berbeda, PIN di-hash bcrypt. |
 | **Dashboard owner** | Omzet hari ini & bulan ini, tren 7 hari, produk terlaris, pesanan berjalan, peringatan stok menipis. |
 | **Kanal pesan online** | Halaman menu publik `/menu/<KODE-BISNIS>` tanpa login; pesanan langsung masuk ke papan pesanan kasir. |
@@ -52,7 +54,9 @@ spreadsheet dibuat otomatis saat onboarding, dan datanya tetap sepenuhnya milik 
 - **Backend** — Go 1.24, [Gin](https://github.com/gin-gonic/gin), REST API, struktur modular
   (handler → service → repository), JWT HS256, bcrypt untuk PIN.
 - **Frontend** — React 18 + Vite + TypeScript (strict), React Router, tanpa dependensi UI
-  eksternal (CSS ditulis sendiri agar bundel tetap ringan).
+  eksternal (CSS ditulis sendiri di atas design token agar bundel tetap ringan).
+  Tata letak dioptimalkan untuk tablet kasir: sidebar menyusut jadi rel ikon di bawah
+  1320px dan target sentuh diperbesar pada layar ≤900px.
 - **Datastore** — Google Drive API v3 + Google Sheets API v4, OAuth2 per akun pengguna.
 
 ---
@@ -69,7 +73,7 @@ Drive pemilik akun/
     └── produk-...                       ← seluruh foto produk tenant
 ```
 
-Spreadsheet berisi empat sheet:
+Spreadsheet berisi enam sheet:
 
 **`Products`**
 
@@ -86,13 +90,27 @@ Spreadsheet berisi empat sheet:
 
 **`Orders`** — modul manajemen pesanan
 
-| ID Pesanan | Kode | ID Transaksi | Tanggal | Diperbarui | Status | Sumber | Nama Pelanggan | No Meja | Items (JSON) | Total | Catatan | Kasir |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ID Pesanan | Kode | ID Transaksi | Tanggal | Diperbarui | Status | Sumber | Nama Pelanggan | No Meja | Items (JSON) | Total | Catatan | Kasir | ID Pelanggan | ID Meja |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 **`Employees`**
 
 | ID | Nama | Email | Role | Status | PIN Hash | Dibuat |
 |---|---|---|---|---|---|---|
+
+**`Customers`** — CRM & loyalitas
+
+| ID | Nama | No HP | Total Belanja | Poin | Terakhir Belanja | Dibuat |
+|---|---|---|---|---|---|---|
+
+**`Tables`** — denah meja F&B
+
+| ID | Nama Meja | Kapasitas | Status | Area | ID Pesanan Aktif | Diperbarui |
+|---|---|---|---|---|---|---|
+
+> Kolom baru selalu ditambahkan di ujung kanan, dan aplikasi otomatis
+> melengkapi baris header lama saat pemilik login kembali — spreadsheet tenant
+> yang sudah berisi data tidak perlu dimigrasi manual.
 
 Spreadsheet ini tetap bisa dibuka, difilter, dan diekspor langsung oleh pemilik usaha dari
 Google Sheets — perubahan manual yang wajar (misal mengetik `Rp 15.000` pada kolom harga)
@@ -129,11 +147,13 @@ backend/
 frontend/
 ├── index.html
 └── src/
-    ├── components/                 # Layout, komponen UI, struk
+    ├── components/                 # Layout, komponen UI, struk, pemilih pelanggan
     ├── context/AuthContext.tsx     # state sesi
     ├── lib/                        # klien API, tipe, format rupiah/tanggal
-    └── pages/                      # Login, Dashboard, Kasir, Pesanan, Produk,
-                                    # Laporan, Karyawan, Pengaturan, Menu publik
+    ├── styles.css                  # design token: warna, tipografi, jarak, radius
+    └── pages/                      # Login, Dashboard, Kasir, Pesanan, Meja, Produk,
+                                    # Pelanggan, Laporan, Karyawan, Pengaturan,
+                                    # dan halaman menu publik
 ```
 
 Alur dependensi selalu satu arah: `handler → service → domain (port) ← repository`.
@@ -273,6 +293,14 @@ Base path: `/api/v1`. Semua respons memakai amplop `{"data": ...}`, dan galat me
 | `GET` | `/reports/sales` | owner | Laporan penjualan (`?granularity=harian\|mingguan\|bulanan`). |
 | `GET` | `/reports/transactions` | owner | Riwayat struk. |
 | `GET` `POST` `PUT` `DELETE` | `/employees[/:id]` | owner | Manajemen karyawan. |
+| `GET` | `/customers` | semua | Daftar/pencarian pelanggan (`?q=`). |
+| `GET` | `/customers/:id` | semua | Detail pelanggan. |
+| `POST` | `/customers` | semua | Daftarkan pelanggan (kasir boleh, saat transaksi). |
+| `PUT` `DELETE` | `/customers/:id` | owner | Ubah / hapus pelanggan. |
+| `GET` | `/customers/:id/history` | owner | Riwayat pembelian pelanggan. |
+| `GET` | `/tables` | semua | Denah meja beserta statusnya. |
+| `PATCH` | `/tables/:id/status` | semua | Ubah status meja. |
+| `POST` `PUT` `DELETE` | `/tables[/:id]` | owner | Kelola daftar meja. |
 
 Contoh checkout:
 
@@ -284,7 +312,8 @@ curl -X POST http://localhost:8080/api/v1/checkout \
         "payment_method": "tunai",
         "amount_paid": 100000,
         "customer_name": "Budi",
-        "table_no": "A1"
+        "customer_phone": "081234567890",
+        "table_id": "TBL-XXXXXX"
       }'
 ```
 
@@ -299,6 +328,10 @@ curl -X POST http://localhost:8080/api/v1/checkout \
 | Papan pesanan | ✅ | ✅ |
 | Lihat katalog produk | ✅ | ✅ |
 | Tambah/ubah/hapus produk | ✅ | — |
+| Lihat denah meja & ubah statusnya | ✅ | ✅ |
+| Tambah/ubah/hapus meja | ✅ | — |
+| Cari & daftarkan pelanggan | ✅ | ✅ |
+| Riwayat pelanggan, ubah & hapus | ✅ | — |
 | Laporan penjualan | ✅ | — |
 | Manajemen karyawan | ✅ | — |
 | Pengaturan bisnis | ✅ | baca saja |
@@ -323,8 +356,9 @@ npm run build
 ```
 
 Cakupan pengujian backend meliputi pemetaan baris Sheets ↔ model (termasuk toleransi format
-rupiah), agregasi laporan, alur kasir dan pesanan, penyimpanan tenant terenkripsi, serta
-uji integrasi HTTP untuk RBAC, checkout, dan kanal pesanan online.
+rupiah), agregasi laporan, alur kasir dan pesanan, akumulasi poin loyalitas, siklus status
+meja, penyimpanan tenant terenkripsi, serta uji integrasi HTTP untuk RBAC, checkout, dan
+kanal pesanan online.
 
 ---
 
@@ -339,6 +373,13 @@ uji integrasi HTTP untuk RBAC, checkout, dan kanal pesanan online.
 - **Kuota API.** Katalog produk dibaca sangat sering oleh layar kasir, jadi hasilnya
   di-cache singkat (`SHEETS_CACHE_TTL`, default 20 detik) dan seluruh panggilan Google
   memakai retry eksponensial untuk status 429/5xx.
+- **Poin loyalitas** dihitung 1 poin per Rp 10.000 (`service.RupiahPerPoint`), dibulatkan
+  ke bawah, dan hanya diberikan setelah pembayaran diterima — pesanan online baru
+  mendapat poin ketika kasir menyelesaikan pembayarannya. Pelanggan dikenali dari nomor
+  HP yang dinormalkan (`0812…`, `+62812…`, dan `62812…` dianggap sama).
+- **Status meja** berpindah otomatis: terisi saat pesanan dibuat di meja tersebut, lalu
+  perlu dibersihkan ketika pesanannya selesai atau dibatalkan. Staf menandainya kosong
+  setelah dirapikan. Meja yang sudah dipakai pesanan lain tidak ikut terbebaskan.
 - **Stok dipotong saat pesanan dibuat** (baik dari kasir maupun online) dan dikembalikan
   saat pesanan dibatalkan. Bila penulisan stok gagal setelah transaksi tercatat, struk tetap
   diterbitkan — penjualan yang sudah terjadi tidak boleh hilang karena kegagalan sinkronisasi.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { BarChart, EmptyState, ErrorAlert, LoadingRows, StatCard, StatusBadge } from '../components/ui'
+import { BarChart, EmptyState, ErrorAlert, LoadingCards, StatCard, StatusBadge } from '../components/ui'
 import { ApiError, request } from '../lib/api'
 import type { Envelope } from '../lib/api'
 import { formatNumber, formatRupiah, formatTime } from '../lib/format'
@@ -32,8 +32,10 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="card">
-        <LoadingRows rows={6} />
+      <div className="stack">
+        <LoadingCards count={4} />
+        <div className="skeleton" style={{ height: 260, borderRadius: 12 }} />
+        <LoadingCards count={2} tile />
       </div>
     )
   }
@@ -48,17 +50,20 @@ export function DashboardPage() {
     <div className="stack">
       <div className="grid grid-4">
         <StatCard
+          icon="💰"
           label="Omzet hari ini"
           value={formatRupiah(summary.today.omzet)}
           hint={`${formatNumber(summary.today.transactions)} transaksi • ${formatNumber(summary.today.items)} item`}
         />
         <StatCard
+          icon="📅"
           label="Omzet bulan ini"
           value={formatRupiah(summary.month.omzet)}
           hint={`Rata-rata belanja ${formatRupiah(summary.month.average_basket)}`}
         />
-        <StatCard label="Pesanan aktif" value={formatNumber(antrian)} hint="Status baru + diproses" />
+        <StatCard icon="🍽️" label="Pesanan aktif" value={formatNumber(antrian)} hint="Status baru + diproses" />
         <StatCard
+          icon="📦"
           label="Produk terdaftar"
           value={formatNumber(summary.product_count)}
           hint={`${summary.low_stock_products.length} produk stok menipis`}
@@ -87,7 +92,7 @@ export function DashboardPage() {
             </Link>
           </div>
           {summary.top_products_month.length === 0 ? (
-            <EmptyState title="Belum ada penjualan bulan ini" />
+            <EmptyState icon="📈" title="Belum ada penjualan bulan ini" hint="Transaksi pertama akan langsung tampil di sini." />
           ) : (
             <table className="table">
               <thead>
@@ -118,7 +123,7 @@ export function DashboardPage() {
             </Link>
           </div>
           {summary.active_orders.length === 0 ? (
-            <EmptyState title="Tidak ada pesanan aktif" hint="Semua pesanan sudah selesai dilayani." />
+            <EmptyState icon="✅" title="Tidak ada pesanan aktif" hint="Semua pesanan sudah selesai dilayani." />
           ) : (
             <table className="table">
               <thead>
@@ -155,7 +160,7 @@ export function DashboardPage() {
           <span className="badge">≤ {summary.low_stock_threshold} unit</span>
         </div>
         {summary.low_stock_products.length === 0 ? (
-          <EmptyState title="Semua stok aman" />
+          <EmptyState icon="👍" title="Semua stok aman" hint="Tidak ada produk yang mendekati habis." />
         ) : (
           <table className="table">
             <thead>

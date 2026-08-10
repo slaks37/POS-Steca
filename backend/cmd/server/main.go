@@ -84,6 +84,8 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 		transactions domain.TransactionRepository
 		orders       domain.OrderRepository
 		employees    domain.EmployeeRepository
+		customers    domain.CustomerRepository
+		tables       domain.TableRepository
 		storage      domain.FileStorage
 		oauth        *googleapi.OAuthManager
 		memStore     *memory.Store
@@ -108,6 +110,8 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 		transactions = gsheets.NewTransactionRepository(provider)
 		orders = gsheets.NewOrderRepository(provider)
 		employees = gsheets.NewEmployeeRepository(provider)
+		customers = gsheets.NewCustomerRepository(provider)
+		tables = gsheets.NewTableRepository(provider)
 		storage = gsheets.NewFileStorage(provider)
 
 	case config.DatastoreMemory:
@@ -118,6 +122,8 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 		transactions = memory.NewTransactionRepo(memStore)
 		orders = memory.NewOrderRepo(memStore)
 		employees = memory.NewEmployeeRepo(memStore)
+		customers = memory.NewCustomerRepo(memStore)
+		tables = memory.NewTableRepo(memStore)
 		storage = memory.NewStorage(memStore)
 	}
 
@@ -128,13 +134,15 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 
 	authService := service.NewAuthService(tenants, employees, provisioner, googleAuth, cfg.JWTSecret, cfg.JWTTTL)
 	productService := service.NewProductService(products, storage)
-	orderService := service.NewOrderService(products, orders, transactions)
+	customerService := service.NewCustomerService(customers, orders)
+	tableService := service.NewTableService(tables, orders)
+	orderService := service.NewOrderService(products, orders, transactions, customerService, tableService)
 	reportService := service.NewReportService(transactions, products, orders)
 	employeeService := service.NewEmployeeService(employees, tenants)
 
 	var demoService *service.DemoService
 	if cfg.Datastore == config.DatastoreMemory && !cfg.IsProduction() {
-		demoService = service.NewDemoService(tenants, employees, products, provisioner, authService)
+		demoService = service.NewDemoService(tenants, employees, products, tables, provisioner, authService)
 	}
 
 	return &handler.Deps{
@@ -145,6 +153,8 @@ func buildDeps(cfg *config.Config) (*handler.Deps, error) {
 		Orders:      orderService,
 		Reports:     reportService,
 		Employees:   employeeService,
+		Customers:   customerService,
+		Tables:      tableService,
 		Tenants:     tenants,
 		MemoryStore: memStore,
 	}, nil
