@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 
 import { Brand, ErrorAlert } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
-import { ApiError, request } from '../lib/api'
+import { ApiError, isNative, request } from '../lib/api'
 import type { User } from '../lib/types'
 
 interface StaffLoginResponse {
@@ -132,17 +132,33 @@ export function LoginPage() {
             <ErrorAlert message={error} />
             {demoHint ? <div className="alert alert-info">{demoHint}</div> : null}
 
-            <button type="button" className="google-btn" onClick={handleGoogleLogin} disabled={busy}>
-              <span aria-hidden>🔐</span>
-              Masuk sebagai Pemilik dengan Google
-            </button>
-            <div className="tiny muted">
-              Aplikasi meminta izin membuat folder dan spreadsheet di Drive Anda. Izin dibatasi pada berkas yang dibuat
-              aplikasi ini saja.
-            </div>
+            {isNative ? (
+              // Google memblokir alur OAuth di dalam WebView aplikasi
+              // (galat "disallowed_useragent"), jadi onboarding pemilik
+              // dilakukan sekali lewat peramban.
+              <div className="alert alert-info small">
+                <span aria-hidden>ℹ️</span>
+                <span>
+                  Hubungkan akun Google sekali lewat peramban di{' '}
+                  <strong>versi web Steca POS</strong>, lalu atur PIN Anda di menu Karyawan. Setelah itu masuk di
+                  aplikasi ini memakai kode bisnis, email, dan PIN tersebut.
+                </span>
+              </div>
+            ) : (
+              <>
+                <button type="button" className="google-btn" onClick={handleGoogleLogin} disabled={busy}>
+                  <span aria-hidden>🔐</span>
+                  Masuk sebagai Pemilik dengan Google
+                </button>
+                <div className="tiny muted">
+                  Aplikasi meminta izin membuat folder dan spreadsheet di Drive Anda. Izin dibatasi pada berkas yang
+                  dibuat aplikasi ini saja.
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="divider">atau masuk sebagai karyawan</div>
+          <div className="divider">{isNative ? 'masuk ke aplikasi' : 'atau masuk sebagai karyawan'}</div>
 
           <form onSubmit={handleStaffLogin}>
             <div className="field">
@@ -185,14 +201,18 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="divider">coba tanpa akun</div>
-          <button type="button" className="btn btn-secondary btn-block" onClick={handleDemoLogin} disabled={busy}>
-            Masuk mode demo
-          </button>
-          <div className="tiny muted" style={{ marginTop: 8 }}>
-            Mode demo memakai data contoh di memori server dan hanya tersedia saat backend dijalankan dengan
-            POS_DATASTORE=memory.
-          </div>
+          {isNative ? null : (
+            <>
+              <div className="divider">coba tanpa akun</div>
+              <button type="button" className="btn btn-secondary btn-block" onClick={handleDemoLogin} disabled={busy}>
+                Masuk mode demo
+              </button>
+              <div className="tiny muted" style={{ marginTop: 8 }}>
+                Mode demo memakai data contoh di memori server dan hanya tersedia saat backend dijalankan dengan
+                POS_DATASTORE=memory.
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

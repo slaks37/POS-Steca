@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Palet merek Steca POS, disamakan dengan design token pada
+  frontend/src/styles.css agar tampilan native dan web konsisten.
+-->
+<resources>
+    <!-- Token brand: #0f9384 -->
+    <color name="colorPrimary">#FF0F9384</color>
+    <!-- Token brand 900: #073b36 -->
+    <color name="colorPrimaryDark">#FF073B36</color>
+    <!-- Token accent: #f5a524 -->
+    <color name="colorAccent">#FFF5A524</color>
+
+    <!-- Latar splash screen, sama dengan backgroundColor pada capacitor.config.ts -->
+    <color name="splashBackground">#FF073B36</color>
+</resources>

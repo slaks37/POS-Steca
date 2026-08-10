@@ -27,6 +27,7 @@ spreadsheet dibuat otomatis saat onboarding, dan datanya tetap sepenuhnya milik 
 - [Menjalankan mode produksi](#menjalankan-mode-produksi)
 - [Referensi REST API](#referensi-rest-api)
 - [Hak akses per role](#hak-akses-per-role)
+- [Aplikasi Android (Capacitor)](#aplikasi-android-capacitor)
 - [Pengujian](#pengujian)
 - [Catatan desain dan batasan](#catatan-desain-dan-batasan)
 
@@ -58,6 +59,9 @@ spreadsheet dibuat otomatis saat onboarding, dan datanya tetap sepenuhnya milik 
   Tata letak dioptimalkan untuk tablet kasir: sidebar menyusut jadi rel ikon di bawah
   1320px dan target sentuh diperbesar pada layar ≤900px.
 - **Datastore** — Google Drive API v3 + Google Sheets API v4, OAuth2 per akun pengguna.
+- **Android** — [Capacitor](https://capacitorjs.com/) membungkus build web yang sama menjadi
+  APK/AAB (`id.stecapos.app`), tanpa menulis ulang UI. Lihat
+  [Aplikasi Android](#aplikasi-android-capacitor).
 
 ---
 
@@ -146,10 +150,14 @@ backend/
 
 frontend/
 ├── index.html
+├── capacitor.config.ts             # appId id.stecapos.app, webDir dist
+├── assets/                         # sumber ikon & splash (1024px / 2732px)
+├── android/                        # project Gradle hasil `cap add android`
 └── src/
     ├── components/                 # Layout, komponen UI, struk, pemilih pelanggan
     ├── context/AuthContext.tsx     # state sesi
-    ├── lib/                        # klien API, tipe, format rupiah/tanggal
+    ├── lib/                        # klien API, tipe, format rupiah/tanggal,
+    │                               # penyesuaian native (splash & status bar)
     ├── styles.css                  # design token: warna, tipografi, jarak, radius
     └── pages/                      # Login, Dashboard, Kasir, Pesanan, Meja, Produk,
                                     # Pelanggan, Laporan, Karyawan, Pengaturan,
@@ -338,6 +346,182 @@ curl -X POST http://localhost:8080/api/v1/checkout \
 
 Pembatasan diberlakukan di backend (middleware `RequireRole`), bukan hanya disembunyikan
 di UI. Akun pemilik Google tidak bisa dihapus, dinonaktifkan, atau diturunkan rolenya.
+
+---
+
+## Aplikasi Android (Capacitor)
+
+Frontend React yang sama dibungkus menjadi aplikasi Android memakai
+[Capacitor](https://capacitorjs.com/) — **UI tidak ditulis ulang**. WebView memuat hasil
+`npm run build`, dan project Gradle standar tersedia di `frontend/android/`.
+
+| Item | Nilai |
+|---|---|
+| Application ID | `id.stecapos.app` |
+| Nama aplikasi | Steca POS |
+| minSdk / targetSdk | 24 / 36 |
+| Izin | `INTERNET` saja |
+
+### Alamat backend wajib berupa URL penuh
+
+WebView Android berjalan pada origin `https://localhost`, sehingga **`localhost` di dalam
+aplikasi menunjuk ke ponsel itu sendiri**, bukan ke komputer pengembang. Build Android
+karena itu wajib menyetel `VITE_API_BASE_URL` ke URL penuh backend:
+
+```bash
+cd frontend
+cp .env.android.example .env.android
+# isi VITE_API_BASE_URL, contoh:
+#   VITE_API_BASE_URL=https://api.tokoanda.com/api/v1
+```
+
+Backend juga perlu mengizinkan origin WebView pada CORS:
+
+```bash
+CORS_ORIGINS=https://pos.tokoanda.com,https://localhost
+```
+
+> Untuk uji coba di jaringan lokal, pakai alamat IP komputer pengembang
+> (`http://192.168.1.10:8080/api/v1`), bukan `localhost`. Android 9+ memblokir HTTP polos,
+> jadi untuk rilis sungguhan gunakan HTTPS.
+
+### Menyiapkan lingkungan build
+
+Dibutuhkan **JDK 17+** dan **Android SDK** (paling praktis lewat Android Studio; atau
+`cmdline-tools` + `platform-tools` + `platforms;android-36` + `build-tools;36.0.0`).
+Beri tahu Gradle lokasi SDK lewat salah satu cara:
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+# atau buat frontend/android/local.properties berisi:
+#   sdk.dir=/home/nama-anda/Android/Sdk
+```
+
+### Membangun ulang aset web ke project Android
+
+Setiap kali kode frontend berubah, jalankan:
+
+```bash
+cd frontend
+npm install
+npm run android:sync     # = build:android + cap sync android
+```
+
+`cap sync` menyalin `dist/` ke `android/app/src/main/assets/public/` dan memperbarui daftar
+plugin. Folder hasil salinan sengaja tidak ikut di-commit, jadi setelah clone baru perintah
+di atas wajib dijalankan sebelum build Gradle.
+
+Untuk membuka di Android Studio: `npm run android:open`.
+
+### Ikon dan splash screen
+
+Sumber gambar ada di `frontend/assets/` (`icon-only.png`, `icon-foreground.png`,
+`icon-background.png`, `splash.png`, `splash-dark.png`) memakai warna merek
+`#0f9384` / `#073b36`. Setelah menggantinya, buat ulang seluruh densitas dengan:
+
+```bash
+npm run android:assets
+```
+
+### Build APK (untuk uji coba / bagi manual)
+
+APK debug tidak perlu keystore dan langsung bisa dipasang ke perangkat:
+
+```bash
+cd frontend/android
+./gradlew assembleDebug
+# hasil: app/build/outputs/apk/debug/app-debug.apk
+```
+
+Pasang ke perangkat yang tersambung: `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+
+### Membuat signing key
+
+Play Store hanya menerima build yang ditandatangani. Buat keystore **satu kali** dan simpan
+baik-baik — kehilangan keystore berarti Anda tidak bisa lagi merilis pembaruan untuk
+aplikasi yang sama.
+
+```bash
+cd frontend/android
+keytool -genkey -v \
+  -keystore steca-pos-release.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias steca-pos
+```
+
+`keytool` akan menanyakan password keystore, nama, organisasi, dan kota. Selanjutnya daftarkan
+kredensialnya:
+
+```bash
+cp keystore.properties.example keystore.properties
+# isi storeFile, storePassword, keyAlias, keyPassword
+```
+
+`android/app/build.gradle` membaca berkas tersebut dan otomatis menandatangani build rilis.
+Bila `keystore.properties` tidak ada, build tetap berjalan tetapi hasilnya tidak
+ditandatangani. Berkas `*.jks`, `*.keystore`, dan `keystore.properties` sudah masuk
+`.gitignore` — **jangan pernah commit keystore atau passwordnya**.
+
+### Build release APK dan AAB
+
+```bash
+cd frontend/android
+
+# APK rilis (untuk distribusi manual / di luar Play Store)
+./gradlew assembleRelease
+# hasil: app/build/outputs/apk/release/app-release.apk
+
+# Android App Bundle (format yang diminta Play Store)
+./gradlew bundleRelease
+# hasil: app/build/outputs/bundle/release/app-release.aab
+```
+
+Verifikasi tanda tangan sebelum diunggah:
+
+```bash
+$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs \
+  app/build/outputs/apk/release/app-release.apk
+```
+
+### Menaikkan versi setiap rilis
+
+Play Store menolak unggahan dengan `versionCode` yang sama. Sebelum build rilis berikutnya,
+naikkan nilainya di `frontend/android/app/build.gradle`:
+
+```gradle
+versionCode 2          // wajib naik setiap unggahan
+versionName "1.1.0"    // versi yang dilihat pengguna
+```
+
+### Login pemilik di aplikasi Android
+
+Google memblokir alur OAuth di dalam WebView aplikasi (galat `disallowed_useragent`), jadi
+tombol "Masuk dengan Google" sengaja tidak ditampilkan pada APK. Alurnya:
+
+1. Pemilik menghubungkan akun Google **sekali** lewat peramban di versi web Steca POS.
+2. Di menu **Karyawan**, pemilik mengatur PIN untuk akunnya sendiri.
+3. Di aplikasi Android, masuk memakai **kode bisnis + email + PIN** seperti kasir.
+
+Kasir sendiri memang sudah memakai jalur PIN, sehingga tidak terpengaruh.
+
+### Yang menjadi tanggung jawab pemilik aplikasi
+
+Repositori ini hanya menyiapkan project sampai menghasilkan APK/AAB. Langkah berikut
+**tidak bisa diotomatiskan** karena butuh akun, identitas, dan kredensial pribadi:
+
+- **Membuat akun Google Play Console** (biaya pendaftaran satu kali dari Google) serta
+  verifikasi identitas/alamat pengembang.
+- **Membuat aplikasi baru di Play Console** dan mengunggah `app-release.aab`.
+- **Mengisi listing toko**: judul, deskripsi, tangkapan layar, ikon toko 512×512, banner
+  1024×500, kategori, dan kontak.
+- **Kebijakan privasi** yang bisa diakses publik — wajib, terlebih karena aplikasi ini
+  mengakses Google Drive dan Sheets milik pengguna.
+- **Data safety form**, target audiens, serta deklarasi izin bila nanti `CAMERA` diaktifkan.
+- **Play App Signing**: Google menyarankan menyerahkan kunci penandatanganan aplikasi ke
+  Google; kunci upload yang Anda buat di atas tetap milik Anda.
+- **Verifikasi OAuth Google** bila consent screen ingin keluar dari status *Testing*
+  (scope Drive tergolong sensitif dan butuh peninjauan Google).
+- Proses **peninjauan dan rilis** ke jalur internal/tertutup/terbuka/produksi.
 
 ---
 

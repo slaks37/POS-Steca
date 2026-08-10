@@ -1,8 +1,40 @@
 // Klien REST tipis untuk backend Steca POS.
 
+import { Capacitor } from '@capacitor/core'
+
 const TOKEN_KEY = 'pos_steca_token'
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
+/** isNative menandai aplikasi sedang berjalan di dalam WebView Android. */
+export const isNative = Capacitor.isNativePlatform()
+
+/**
+ * resolveApiBase menentukan alamat backend.
+ *
+ * Di web, nilai relatif "/api/v1" sudah cukup karena dev server Vite
+ * mem-proxy-nya (lihat vite.config.ts) dan hosting produksi berada satu
+ * domain dengan backend.
+ *
+ * Di Android, WebView berjalan pada origin https://localhost sehingga URL
+ * relatif akan menunjuk ke perangkat itu sendiri dan selalu gagal. Build
+ * Android karena itu wajib menyetel VITE_API_BASE_URL ke URL penuh backend.
+ */
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL?.trim()
+  if (configured) return configured.replace(/\/$/, '')
+
+  if (isNative) {
+    // Jangan diam-diam gagal: beri pesan yang jelas di logcat saat APK dibuat
+    // tanpa VITE_API_BASE_URL.
+    console.error(
+      'VITE_API_BASE_URL belum disetel. Build Android harus memakai URL penuh backend, ' +
+        'misal https://api.tokoanda.com/api/v1. Jalankan `npm run build:android` setelah ' +
+        'menyalin .env.android.example menjadi .env.android.',
+    )
+  }
+  return '/api/v1'
+}
+
+export const API_BASE = resolveApiBase()
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -15,6 +15,14 @@ import { PublicMenuPage } from './pages/PublicMenuPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { TablesPage } from './pages/TablesPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { isNative } from './lib/api'
+
+/**
+ * Di web dipakai BrowserRouter agar URL tetap bersih. Di WebView Android
+ * berkas dilayani dari bundel aset, jadi HashRouter dipilih supaya navigasi
+ * langsung ke rute dalam (mis. /kasir) tidak bergantung pada fallback server.
+ */
+const Router = isNative ? HashRouter : BrowserRouter
 
 function FullScreenLoader() {
   return (
@@ -46,7 +54,7 @@ function HomeRedirect() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -103,6 +111,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
-    </BrowserRouter>
+    </Router>
   )
 }
