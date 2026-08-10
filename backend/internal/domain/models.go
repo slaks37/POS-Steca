@@ -91,38 +91,31 @@ func ValidPayment(m string) bool {
 	return false
 }
 
-// Tenant merepresentasikan satu akun bisnis (UMKM) beserta lokasi
-// penyimpanannya di Google Drive milik pemilik akun.
+// Tenant merepresentasikan satu akun bisnis (UMKM). Data terstrukturnya
+// berada di PostgreSQL; FolderID menunjuk folder Google Drive milik pemilik
+// akun tempat gambar produk disimpan.
 type Tenant struct {
-	ID            string    `json:"id"`
-	Code          string    `json:"code"`
-	BusinessName  string    `json:"business_name"`
-	OwnerEmail    string    `json:"owner_email"`
-	OwnerName     string    `json:"owner_name"`
-	FolderID      string    `json:"folder_id"`
-	SpreadsheetID string    `json:"spreadsheet_id"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Code         string    `json:"code"`
+	BusinessName string    `json:"business_name"`
+	OwnerEmail   string    `json:"owner_email"`
+	OwnerName    string    `json:"owner_name"`
+	FolderID     string    `json:"folder_id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 
 	// RefreshToken disimpan terenkripsi oleh TenantStore dan tidak pernah
 	// dikirim ke klien.
 	RefreshToken string `json:"-"`
 }
 
-// FolderURL mengembalikan tautan folder Drive milik tenant.
+// FolderURL mengembalikan tautan folder Drive tempat gambar produk tenant
+// disimpan.
 func (t Tenant) FolderURL() string {
 	if t.FolderID == "" {
 		return ""
 	}
 	return "https://drive.google.com/drive/folders/" + t.FolderID
-}
-
-// SpreadsheetURL mengembalikan tautan spreadsheet datastore tenant.
-func (t Tenant) SpreadsheetURL() string {
-	if t.SpreadsheetID == "" {
-		return ""
-	}
-	return "https://docs.google.com/spreadsheets/d/" + t.SpreadsheetID
 }
 
 // Employee adalah karyawan yang bisa masuk ke aplikasi. Owner otomatis
@@ -135,23 +128,19 @@ type Employee struct {
 	Active    bool      `json:"active"`
 	PINHash   string    `json:"-"`
 	CreatedAt time.Time `json:"created_at"`
-
-	// RowNumber adalah nomor baris pada sheet sumber (1-based, termasuk
-	// header). Nol berarti baris belum diketahui.
-	RowNumber int `json:"-"`
 }
 
-// Product adalah satu item jualan yang tersimpan di sheet "Products".
+// Product adalah satu item jualan. ImageID menyimpan file ID Google Drive
+// agar gambar lama bisa dibersihkan saat produk diubah atau dihapus.
 type Product struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Category  string  `json:"category"`
-	Price     float64 `json:"price"`
-	Stock     int     `json:"stock"`
-	SKU       string  `json:"sku"`
-	ImageURL  string  `json:"image_url"`
-	ImageID   string  `json:"image_id"`
-	RowNumber int     `json:"-"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Category string  `json:"category"`
+	Price    float64 `json:"price"`
+	Stock    int     `json:"stock"`
+	SKU      string  `json:"sku"`
+	ImageURL string  `json:"image_url"`
+	ImageID  string  `json:"image_id"`
 }
 
 // NormalizePhone menyeragamkan nomor HP Indonesia agar satu pelanggan tidak
@@ -183,7 +172,6 @@ type Customer struct {
 	Points       int       `json:"points"`
 	LastPurchase time.Time `json:"last_purchase"`
 	CreatedAt    time.Time `json:"created_at"`
-	RowNumber    int       `json:"-"`
 }
 
 // Table adalah satu meja pada denah bisnis F&B.
@@ -195,7 +183,6 @@ type Table struct {
 	Area          string      `json:"area"`
 	ActiveOrderID string      `json:"active_order_id"`
 	UpdatedAt     time.Time   `json:"updated_at"`
-	RowNumber     int         `json:"-"`
 }
 
 // OrderItem adalah baris item pada satu pesanan/transaksi.
@@ -212,8 +199,9 @@ func (i OrderItem) Subtotal() float64 {
 	return i.UnitPrice * float64(i.Qty)
 }
 
-// TransactionLine adalah satu baris pada sheet "Transactions". Satu transaksi
-// dengan tiga item akan menghasilkan tiga baris dengan TransactionID sama.
+// TransactionLine adalah satu baris pada tabel transaction_lines yang bersifat
+// append-only. Satu transaksi dengan tiga item menghasilkan tiga baris dengan
+// TransactionID yang sama.
 type TransactionLine struct {
 	Date          time.Time `json:"date"`
 	TransactionID string    `json:"transaction_id"`
@@ -264,6 +252,4 @@ type Order struct {
 	// tetap sah.
 	CustomerID string `json:"customer_id"`
 	TableID    string `json:"table_id"`
-
-	RowNumber int `json:"-"`
 }

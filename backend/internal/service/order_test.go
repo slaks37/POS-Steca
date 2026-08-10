@@ -66,7 +66,7 @@ func (f *fakeProducts) Delete(_ context.Context, _, id string) error {
 func (f *fakeProducts) AdjustStock(_ context.Context, _ string, deltas map[string]int) error {
 	f.stockCalls = append(f.stockCalls, deltas)
 	if f.failAdjust {
-		return errors.New("sheets sedang bermasalah")
+		return errors.New("penyimpanan sedang bermasalah")
 	}
 	for i := range f.items {
 		if d, ok := deltas[f.items[i].ID]; ok {

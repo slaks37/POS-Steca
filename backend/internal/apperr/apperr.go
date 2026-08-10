@@ -67,7 +67,7 @@ func Internal(format string, args ...any) *Error {
 	return newf(http.StatusInternalServerError, "internal_error", format, args...)
 }
 
-// Upstream menandai kegagalan saat memanggil Google Drive/Sheets API.
+// Upstream menandai kegagalan saat memanggil Google Drive API.
 func Upstream(format string, args ...any) *Error {
 	return newf(http.StatusBadGateway, "upstream_error", format, args...)
 }

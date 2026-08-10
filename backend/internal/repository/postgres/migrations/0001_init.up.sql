@@ -6,8 +6,8 @@
 -- jadi menghapus satu tenant membersihkan seluruh datanya.
 
 -- ---------------------------------------------------------------------------
--- tenants: menggantikan berkas data/tenants.json.
--- refresh_token_enc tetap berisi ciphertext AES-256-GCM (base64 URL-safe) yang
+-- tenants: identitas tiap akun bisnis.
+-- refresh_token_enc berisi ciphertext AES-256-GCM (base64 URL-safe) yang
 -- dihasilkan internal/crypto — database tidak pernah menyimpan token mentah.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS tenants (
@@ -114,8 +114,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS tables_tenant_name_key
 
 -- ---------------------------------------------------------------------------
 -- orders (modul manajemen pesanan)
--- Daftar item disimpan sebagai JSONB agar satu pesanan tetap satu baris,
--- sama seperti representasi sebelumnya di Google Sheets.
+-- Daftar item disimpan sebagai JSONB agar satu pesanan tetap satu baris.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS orders (
     tenant_id      TEXT           NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
@@ -145,8 +144,8 @@ CREATE INDEX IF NOT EXISTS orders_tenant_customer_idx
     ON orders (tenant_id, customer_id) WHERE customer_id <> '';
 
 -- ---------------------------------------------------------------------------
--- transaction_lines: bersifat append-only, satu baris per item terjual —
--- padanan langsung sheet "Transactions". Laporan penjualan membacanya.
+-- transaction_lines: bersifat append-only, satu baris per item terjual.
+-- Laporan penjualan membacanya.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS transaction_lines (
     seq            BIGSERIAL      PRIMARY KEY,

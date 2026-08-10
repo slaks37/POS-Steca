@@ -84,8 +84,8 @@ func (s *AuthService) GoogleLoginURL() (string, error) {
 }
 
 // HandleGoogleCallback menyelesaikan alur OAuth: menukar code, membuat atau
-// memperbarui tenant, menyiapkan folder Drive + spreadsheet, lalu menerbitkan
-// token aplikasi.
+// memperbarui tenant, menyiapkan folder Drive untuk gambar produk, lalu
+// menerbitkan token aplikasi.
 func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state string) (string, *Principal, error) {
 	if s.google == nil {
 		return "", nil, apperr.BadRequest("login Google tidak aktif pada mode datastore ini")

@@ -131,7 +131,6 @@ type fakeProvisioner struct{ calls int }
 func (f *fakeProvisioner) Provision(_ context.Context, t *domain.Tenant) error {
 	f.calls++
 	t.FolderID = "folder-" + t.ID
-	t.SpreadsheetID = "sheet-" + t.ID
 	return nil
 }
 
@@ -199,8 +198,8 @@ func TestOnboardingGoogleMembuatTenantDanOwner(t *testing.T) {
 		t.Fatalf("jumlah tenant = %d, ingin 1", len(tenants.items))
 	}
 	tenant, _ := tenants.GetByOwnerEmail(ctx, "owner@warung.com")
-	if tenant.SpreadsheetID == "" || tenant.FolderID == "" {
-		t.Error("folder Drive dan spreadsheet harus disiapkan saat onboarding")
+	if tenant.FolderID == "" {
+		t.Error("folder Drive harus disiapkan saat onboarding")
 	}
 	if tenant.Code == "" {
 		t.Error("kode bisnis harus dibuat")

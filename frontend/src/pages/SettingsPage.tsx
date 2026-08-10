@@ -6,7 +6,7 @@ import { ApiError, request } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import type { Tenant } from '../lib/types'
 
-/** SettingsPage menampilkan profil bisnis dan tautan datastore Google. */
+/** SettingsPage menampilkan profil bisnis, penyimpanan data, dan kanal online. */
 export function SettingsPage() {
   const { tenant, isOwner, setTenant } = useAuth()
   const [businessName, setBusinessName] = useState(tenant?.business_name ?? '')
@@ -84,25 +84,18 @@ export function SettingsPage() {
             </div>
             <div className="card-pad stack" style={{ gap: 12 }}>
               <p className="small muted" style={{ margin: 0 }}>
-                Seluruh produk dan transaksi bisnis ini tersimpan di Google Drive milik Anda sendiri — bukan di
-                database aplikasi. Anda bisa membukanya kapan saja.
+                Produk, transaksi, pesanan, pelanggan, dan karyawan tersimpan di database PostgreSQL aplikasi, terpisah
+                per bisnis. Gambar produk disimpan di folder Google Drive milik akun Anda sendiri.
               </p>
-              {tenant.spreadsheet_url ? (
-                <a className="btn btn-secondary" href={tenant.spreadsheet_url} target="_blank" rel="noreferrer">
-                  📊 Buka spreadsheet data
-                </a>
-              ) : (
-                <div className="alert alert-info small">Spreadsheet belum tersedia untuk mode datastore ini.</div>
-              )}
               {tenant.folder_url ? (
                 <a className="btn btn-secondary" href={tenant.folder_url} target="_blank" rel="noreferrer">
                   🗂️ Buka folder gambar produk
                 </a>
-              ) : null}
-              <div className="tiny muted">
-                Sheet yang dipakai: <strong>Products</strong>, <strong>Transactions</strong>,{' '}
-                <strong>Orders</strong>, dan <strong>Employees</strong>.
-              </div>
+              ) : (
+                <div className="alert alert-info small">
+                  Folder Drive belum tersedia pada mode datastore ini.
+                </div>
+              )}
             </div>
           </div>
 

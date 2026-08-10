@@ -30,7 +30,9 @@ func TestParseTanggalSaja(t *testing.T) {
 }
 
 func TestParseNilaiTidakValid(t *testing.T) {
-	for _, input := range []string{"", "   ", "bukan tanggal"} {
+	// "45000" dulu ditafsirkan sebagai angka serial tanggal Google Sheets.
+	// Setelah Sheets tidak lagi dipakai, angka polos bukan tanggal yang sah.
+	for _, input := range []string{"", "   ", "bukan tanggal", "45000"} {
 		if got := Parse(input); !got.IsZero() {
 			t.Errorf("Parse(%q) = %v, ingin waktu nol", input, got)
 		}

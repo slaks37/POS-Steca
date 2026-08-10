@@ -49,7 +49,6 @@ export interface Tenant {
   owner_email: string
   owner_name: string
   folder_url: string
-  spreadsheet_url: string
   created_at: string
 }
 
@@ -109,7 +108,7 @@ export interface CheckoutResult {
   receipt?: Receipt
 }
 
-/** Transaction adalah struk hasil penggabungan baris sheet "Transactions". */
+/** Transaction adalah struk hasil penggabungan baris transaksi. */
 export interface Transaction {
   id: string
   date: string

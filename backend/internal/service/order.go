@@ -81,7 +81,7 @@ func NewOrderService(
 }
 
 // Checkout mencatat penjualan langsung di kasir: stok berkurang, transaksi
-// tercatat di sheet "Transactions", dan pesanan masuk antrian dengan status
+// tercatat pada tabel transaksi, dan pesanan masuk antrian dengan status
 // "baru" agar bisa dilacak dapur.
 func (s *OrderService) Checkout(ctx context.Context, tenantID, cashier string, in CheckoutInput) (*CheckoutResult, error) {
 	method := strings.ToLower(strings.TrimSpace(in.PaymentMethod))

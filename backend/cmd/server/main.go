@@ -16,10 +16,9 @@ import (
 	"github.com/slaks37/pos-steca/backend/internal/domain"
 	"github.com/slaks37/pos-steca/backend/internal/googleapi"
 	"github.com/slaks37/pos-steca/backend/internal/handler"
-	"github.com/slaks37/pos-steca/backend/internal/repository/gsheets"
+	"github.com/slaks37/pos-steca/backend/internal/repository/drivestore"
 	"github.com/slaks37/pos-steca/backend/internal/repository/memory"
 	"github.com/slaks37/pos-steca/backend/internal/repository/postgres"
-	"github.com/slaks37/pos-steca/backend/internal/repository/tenantstore"
 	"github.com/slaks37/pos-steca/backend/internal/service"
 	"github.com/slaks37/pos-steca/backend/internal/timex"
 )
@@ -123,35 +122,13 @@ func buildDeps(ctx context.Context, cfg *config.Config) (*handler.Deps, func(), 
 		customers = postgres.NewCustomerRepository(pool)
 		tables = postgres.NewTableRepository(pool)
 
-		// Data sudah pindah ke PostgreSQL, tetapi gambar produk tetap
-		// disimpan di folder Drive milik pemilik akun sehingga onboarding
-		// hanya perlu menyiapkan foldernya.
+		// Seluruh data terstruktur ada di PostgreSQL. Google Drive hanya
+		// dipakai untuk gambar produk, sehingga onboarding cukup menyiapkan
+		// folder milik tenant.
 		oauth = googleapi.NewOAuthManager(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
-		provider := gsheets.NewProvider(oauth, store)
-		provisioner = gsheets.NewDriveFolderProvisioner(provider)
-		storage = gsheets.NewFileStorage(provider)
-
-	case config.DatastoreGoogle:
-		sealer, err := crypto.NewSealer(cfg.EncryptionKey)
-		if err != nil {
-			return nil, cleanup, err
-		}
-		store, err := tenantstore.NewFileStore(cfg.DataDir, sealer)
-		if err != nil {
-			return nil, cleanup, err
-		}
-		oauth = googleapi.NewOAuthManager(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
-		provider := gsheets.NewProvider(oauth, store)
-
-		tenants = store
-		provisioner = provider
-		products = gsheets.NewProductRepository(provider, cfg.SheetsCacheTTL)
-		transactions = gsheets.NewTransactionRepository(provider)
-		orders = gsheets.NewOrderRepository(provider)
-		employees = gsheets.NewEmployeeRepository(provider)
-		customers = gsheets.NewCustomerRepository(provider)
-		tables = gsheets.NewTableRepository(provider)
-		storage = gsheets.NewFileStorage(provider)
+		driveProvider := drivestore.NewProvider(oauth, store)
+		provisioner = drivestore.NewFolderProvisioner(driveProvider)
+		storage = drivestore.NewFileStorage(driveProvider)
 
 	case config.DatastoreMemory:
 		memStore = memory.NewStore("http://localhost:" + cfg.Port + "/api/v1/files")

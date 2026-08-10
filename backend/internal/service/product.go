@@ -36,7 +36,7 @@ type ProductInput struct {
 	ImageID  string  `json:"image_id"`
 }
 
-// ProductService mengelola katalog produk (sinkron dengan sheet "Products").
+// ProductService mengelola katalog produk.
 type ProductService struct {
 	products domain.ProductRepository
 	storage  domain.FileStorage
@@ -103,7 +103,7 @@ func (s *ProductService) Get(ctx context.Context, tenantID, productID string) (*
 	return s.products.Get(ctx, tenantID, productID)
 }
 
-// Create menambahkan produk baru ke sheet "Products".
+// Create menambahkan produk baru ke katalog tenant.
 func (s *ProductService) Create(ctx context.Context, tenantID string, in ProductInput) (*domain.Product, error) {
 	if err := validateProductInput(in); err != nil {
 		return nil, err

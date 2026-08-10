@@ -28,7 +28,7 @@ const pages: Record<string, { title: string; sub: string }> = {
   '/kasir': { title: 'Kasir', sub: 'Catat transaksi dan cetak struk' },
   '/pesanan': { title: 'Manajemen Pesanan', sub: 'Pantau pesanan dari kasir dan kanal online' },
   '/meja': { title: 'Denah Meja', sub: 'Status meja dan kapasitasnya' },
-  '/produk': { title: 'Produk & Stok', sub: 'Katalog yang tersinkron dengan Google Sheets' },
+  '/produk': { title: 'Produk & Stok', sub: 'Katalog, stok, dan gambar produk' },
   '/pelanggan': { title: 'Pelanggan & Loyalitas', sub: 'Riwayat belanja dan poin pelanggan' },
   '/laporan': { title: 'Laporan Penjualan', sub: 'Omzet, produk terlaris, dan performa kasir' },
   '/karyawan': { title: 'Karyawan', sub: 'Akun dan level akses tim Anda' },

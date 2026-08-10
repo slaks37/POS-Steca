@@ -35,7 +35,7 @@ export function CustomerPicker({
       setResults([])
       return
     }
-    // Tunda permintaan agar tiap ketikan tidak memanggil Google Sheets.
+    // Tunda permintaan agar tiap ketikan tidak memanggil backend.
     const timer = window.setTimeout(() => {
       setSearching(true)
       request<Envelope<Customer[]>>(`/customers?q=${encodeURIComponent(term)}`)

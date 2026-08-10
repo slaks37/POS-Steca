@@ -19,9 +19,9 @@ interface DemoLoginResponse {
 
 const features = [
   {
-    icon: '🗂️',
-    title: 'Data tersimpan di Google Drive Anda',
-    body: 'Setiap bisnis punya satu folder Drive dan satu spreadsheet sendiri. Datanya tetap milik Anda.',
+    icon: '🔒',
+    title: 'Data tiap bisnis terpisah',
+    body: 'Setiap bisnis punya ruang datanya sendiri, dan gambar produk tersimpan di folder Drive milik Anda.',
   },
   {
     icon: '🧾',
@@ -103,8 +103,8 @@ export function LoginPage() {
         <Brand size="lg" tagline="Point of Sale UMKM" />
         <h2>Kasir modern untuk UMKM Indonesia</h2>
         <p style={{ maxWidth: 460, margin: 0 }}>
-          Kelola penjualan, stok, dan pesanan dari satu tempat — tanpa server database. Semua data tercatat rapi di
-          Google Sheets milik bisnis Anda sendiri.
+          Kelola penjualan, stok, dan pesanan dari satu tempat. Semua transaksi tercatat rapi dan siap dilihat
+          kapan saja lewat laporan.
         </p>
         <div className="stack" style={{ gap: 14, marginTop: 8 }}>
           {features.map((f) => (
@@ -151,7 +151,7 @@ export function LoginPage() {
                   Masuk sebagai Pemilik dengan Google
                 </button>
                 <div className="tiny muted">
-                  Aplikasi meminta izin membuat folder dan spreadsheet di Drive Anda. Izin dibatasi pada berkas yang
+                  Aplikasi meminta izin membuat folder gambar produk di Drive Anda. Izin dibatasi pada berkas yang
                   dibuat aplikasi ini saja.
                 </div>
               </>

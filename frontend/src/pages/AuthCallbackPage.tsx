@@ -40,7 +40,7 @@ export function AuthCallbackPage() {
         ) : (
           <div className="row">
             <div className="spinner" style={{ borderTopColor: 'var(--brand)', borderColor: 'var(--border)' }} />
-            <span>Menyiapkan folder Drive dan spreadsheet bisnis Anda...</span>
+            <span>Menyiapkan akun dan folder Drive bisnis Anda...</span>
           </div>
         )}
       </div>

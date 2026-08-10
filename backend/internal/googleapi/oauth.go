@@ -1,6 +1,6 @@
-// Package googleapi membungkus seluruh interaksi dengan Google OAuth2,
-// Google Drive, dan Google Sheets. Layer di atasnya (repository/service)
-// tidak pernah menyentuh SDK Google secara langsung.
+// Package googleapi membungkus interaksi dengan Google OAuth2 dan Google
+// Drive. Layer di atasnya (repository/service) tidak pernah menyentuh SDK
+// Google secara langsung.
 package googleapi
 
 import (
@@ -17,15 +17,14 @@ import (
 	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
-	"google.golang.org/api/sheets/v4"
 )
 
 // Scope yang diminta saat onboarding. drive.file membatasi akses hanya pada
 // berkas yang dibuat aplikasi ini, sehingga aplikasi tidak bisa membaca isi
-// Drive pengguna yang lain.
+// Drive pengguna yang lain. Data terstruktur tersimpan di PostgreSQL, jadi
+// scope spreadsheet tidak lagi diperlukan.
 var Scopes = []string{
 	"https://www.googleapis.com/auth/drive.file",
-	"https://www.googleapis.com/auth/spreadsheets",
 	"openid",
 	"https://www.googleapis.com/auth/userinfo.email",
 	"https://www.googleapis.com/auth/userinfo.profile",
@@ -151,16 +150,11 @@ func (m *OAuthManager) ExchangeUser(ctx context.Context, code string) (string, *
 	return tok.RefreshToken, info, nil
 }
 
-// NewServices membuat klien Drive dan Sheets untuk satu refresh token.
-func (m *OAuthManager) NewServices(ctx context.Context, refreshToken string) (*drive.Service, *sheets.Service, error) {
-	ts := m.TokenSource(ctx, refreshToken)
-	driveSvc, err := drive.NewService(ctx, option.WithTokenSource(ts))
+// NewDriveService membuat klien Google Drive untuk satu refresh token tenant.
+func (m *OAuthManager) NewDriveService(ctx context.Context, refreshToken string) (*drive.Service, error) {
+	driveSvc, err := drive.NewService(ctx, option.WithTokenSource(m.TokenSource(ctx, refreshToken)))
 	if err != nil {
-		return nil, nil, fmt.Errorf("membuat klien Drive: %w", err)
+		return nil, fmt.Errorf("membuat klien Drive: %w", err)
 	}
-	sheetsSvc, err := sheets.NewService(ctx, option.WithTokenSource(ts))
-	if err != nil {
-		return nil, nil, fmt.Errorf("membuat klien Sheets: %w", err)
-	}
-	return driveSvc, sheetsSvc, nil
+	return driveSvc, nil
 }

@@ -142,13 +142,12 @@ func (h *AuthHandler) UpdateTenant(c *gin.Context) {
 // tenantView menyaring field tenant yang aman dikirim ke frontend.
 func tenantView(t *domain.Tenant) gin.H {
 	return gin.H{
-		"id":              t.ID,
-		"code":            t.Code,
-		"business_name":   t.BusinessName,
-		"owner_email":     t.OwnerEmail,
-		"owner_name":      t.OwnerName,
-		"folder_url":      t.FolderURL(),
-		"spreadsheet_url": t.SpreadsheetURL(),
-		"created_at":      t.CreatedAt,
+		"id":            t.ID,
+		"code":          t.Code,
+		"business_name": t.BusinessName,
+		"owner_email":   t.OwnerEmail,
+		"owner_name":    t.OwnerName,
+		"folder_url":    t.FolderURL(),
+		"created_at":    t.CreatedAt,
 	}
 }

@@ -2,6 +2,7 @@ package googleapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -10,11 +11,8 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
-// MimeFolder dan MimeSpreadsheet adalah tipe MIME khusus Google Drive.
-const (
-	MimeFolder      = "application/vnd.google-apps.folder"
-	MimeSpreadsheet = "application/vnd.google-apps.spreadsheet"
-)
+// MimeFolder adalah tipe MIME folder Google Drive.
+const MimeFolder = "application/vnd.google-apps.folder"
 
 // DriveClient membungkus operasi Drive yang dipakai POS Steca.
 type DriveClient struct {
@@ -45,39 +43,11 @@ func (d *DriveClient) EnsureFolder(ctx context.Context, name string) (string, er
 		return d.svc.Files.Create(&drive.File{
 			Name:        name,
 			MimeType:    MimeFolder,
-			Description: "Folder data POS Steca (gambar produk & spreadsheet penjualan)",
+			Description: "Folder gambar produk Steca POS",
 		}).Fields("id").Context(ctx).Do()
 	})
 	if err != nil {
 		return "", fmt.Errorf("membuat folder Drive: %w", err)
-	}
-	return created.Id, nil
-}
-
-// EnsureSpreadsheet mencari spreadsheet dengan nama tertentu di dalam folder,
-// dan membuatnya bila belum ada.
-func (d *DriveClient) EnsureSpreadsheet(ctx context.Context, folderID, name string) (string, error) {
-	query := fmt.Sprintf("mimeType='%s' and name='%s' and trashed=false and '%s' in parents",
-		MimeSpreadsheet, escapeQuery(name), folderID)
-	list, err := call(ctx, func() (*drive.FileList, error) {
-		return d.svc.Files.List().Q(query).Spaces("drive").Fields("files(id,name)").PageSize(10).Context(ctx).Do()
-	})
-	if err != nil {
-		return "", fmt.Errorf("mencari spreadsheet: %w", err)
-	}
-	if len(list.Files) > 0 {
-		return list.Files[0].Id, nil
-	}
-
-	created, err := call(ctx, func() (*drive.File, error) {
-		return d.svc.Files.Create(&drive.File{
-			Name:     name,
-			MimeType: MimeSpreadsheet,
-			Parents:  []string{folderID},
-		}).Fields("id").Context(ctx).Do()
-	})
-	if err != nil {
-		return "", fmt.Errorf("membuat spreadsheet: %w", err)
 	}
 	return created.Id, nil
 }
@@ -126,6 +96,12 @@ func (d *DriveClient) DeleteFile(ctx context.Context, fileID string) error {
 // tag <img>.
 func PublicImageURL(fileID string) string {
 	return "https://drive.google.com/thumbnail?id=" + fileID + "&sz=w800"
+}
+
+// IsNotFound memeriksa apakah error berasal dari Google API dengan status 404.
+func IsNotFound(err error) bool {
+	var gerr *googleapi.Error
+	return errors.As(err, &gerr) && gerr.Code == 404
 }
 
 func escapeQuery(s string) string {

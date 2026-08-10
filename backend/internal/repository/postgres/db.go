@@ -1,7 +1,5 @@
 // Package postgres mengimplementasikan port repository domain di atas
-// PostgreSQL. Mulai tahap 1 migrasi, package inilah sumber kebenaran data
-// produksi; package gsheets tetap dipertahankan untuk fitur sinkronisasi
-// opsional pada tahap berikutnya.
+// PostgreSQL — satu-satunya sumber kebenaran data terstruktur aplikasi.
 //
 // Aturan multi-tenant: SETIAP query menyertakan predikat tenant_id sehingga
 // data satu bisnis tidak mungkin terbaca oleh bisnis lain. Tabel pun memakai

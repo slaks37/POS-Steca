@@ -13,14 +13,10 @@ import (
 type Datastore string
 
 const (
-	// DatastorePostgres memakai PostgreSQL sebagai sumber kebenaran (mode
-	// produksi sejak tahap 1 migrasi). Google Drive tetap dipakai untuk
-	// menyimpan gambar produk.
+	// DatastorePostgres adalah satu-satunya mode produksi: seluruh data
+	// terstruktur berada di PostgreSQL, sementara Google Drive dipakai untuk
+	// gambar produk dan OAuth2 untuk login pemilik.
 	DatastorePostgres Datastore = "postgres"
-	// DatastoreGoogle memakai Google Drive + Google Sheets sebagai sumber
-	// kebenaran. Dipertahankan agar instalasi lama tetap bisa berjalan dan
-	// sebagai dasar fitur sinkronisasi opsional pada tahap berikutnya.
-	DatastoreGoogle Datastore = "google"
 	// DatastoreMemory memakai penyimpanan in-memory untuk pengembangan lokal
 	// dan mode demo, tanpa kredensial maupun database apa pun.
 	DatastoreMemory Datastore = "memory"
@@ -41,15 +37,12 @@ type Config struct {
 	JWTSecret string
 	JWTTTL    time.Duration
 
-	DataDir       string
 	EncryptionKey string
 
 	// DatabaseURL wajib diisi pada mode postgres, contoh:
 	// postgres://pos:pos@localhost:5432/pos_steca?sslmode=disable
 	DatabaseURL   string
 	RunMigrations bool
-
-	SheetsCacheTTL time.Duration
 }
 
 // Load membaca konfigurasi dan memvalidasinya sesuai mode datastore.
@@ -57,18 +50,16 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:               env("PORT", "8080"),
 		Env:                env("APP_ENV", "development"),
-		Datastore:          Datastore(env("POS_DATASTORE", string(DatastoreGoogle))),
+		Datastore:          Datastore(env("POS_DATASTORE", string(DatastorePostgres))),
 		FrontendURL:        strings.TrimSuffix(env("FRONTEND_URL", "http://localhost:5173"), "/"),
 		GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/google/callback"),
 		JWTSecret:          env("JWT_SECRET", ""),
 		JWTTTL:             envDuration("JWT_TTL", 12*time.Hour),
-		DataDir:            env("DATA_DIR", "./data"),
 		DatabaseURL:        env("DATABASE_URL", ""),
 		RunMigrations:      envBool("RUN_MIGRATIONS", true),
 		EncryptionKey:      env("ENCRYPTION_KEY", ""),
-		SheetsCacheTTL:     envDuration("SHEETS_CACHE_TTL", 20*time.Second),
 	}
 
 	origins := env("CORS_ORIGINS", cfg.FrontendURL)
@@ -79,10 +70,10 @@ func Load() (*Config, error) {
 	}
 
 	switch cfg.Datastore {
-	case DatastorePostgres, DatastoreGoogle, DatastoreMemory:
+	case DatastorePostgres, DatastoreMemory:
 	default:
 		return nil, fmt.Errorf(
-			"POS_DATASTORE tidak dikenal: %q (pilih postgres, google, atau memory)", cfg.Datastore)
+			"POS_DATASTORE tidak dikenal: %q (pilih postgres atau memory)", cfg.Datastore)
 	}
 
 	if cfg.JWTSecret == "" {
@@ -94,9 +85,9 @@ func Load() (*Config, error) {
 		}
 	}
 
-	if cfg.Datastore == DatastorePostgres || cfg.Datastore == DatastoreGoogle {
+	if cfg.Datastore == DatastorePostgres {
 		missing := []string{}
-		if cfg.Datastore == DatastorePostgres && cfg.DatabaseURL == "" {
+		if cfg.DatabaseURL == "" {
 			missing = append(missing, "DATABASE_URL")
 		}
 		if cfg.GoogleClientID == "" {

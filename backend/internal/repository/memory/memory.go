@@ -1,7 +1,7 @@
 // Package memory menyediakan implementasi seluruh port repository di dalam
-// memori. Driver ini HANYA untuk pengembangan lokal dan demo (POS_DATASTORE=memory)
-// sehingga aplikasi bisa dijalankan tanpa kredensial Google. Data hilang saat
-// proses berhenti.
+// memori. Driver ini HANYA untuk pengembangan lokal dan demo
+// (POS_DATASTORE=memory) sehingga aplikasi bisa dijalankan tanpa database
+// maupun kredensial Google. Data hilang saat proses berhenti.
 package memory
 
 import (
@@ -139,7 +139,6 @@ func (s *Store) List(_ context.Context) ([]*domain.Tenant, error) {
 // Provision menandai tenant sebagai siap pakai (tanpa Drive sungguhan).
 func (s *Store) Provision(_ context.Context, t *domain.Tenant) error {
 	t.FolderID = "memory-folder-" + t.ID
-	t.SpreadsheetID = "memory-sheet-" + t.ID
 	return nil
 }
 

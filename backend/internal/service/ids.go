@@ -47,7 +47,7 @@ func NewCustomerID() string { return "CST-" + randomString(8) }
 func NewTableID() string { return "TBL-" + randomString(6) }
 
 // NewTransactionID membuat ID transaksi berformat TRX-YYYYMMDD-XXXXX agar
-// mudah dicari langsung di Google Sheets.
+// mudah dibaca kasir dan dicari saat penelusuran struk.
 func NewTransactionID() string {
 	return fmt.Sprintf("TRX-%s-%s", timex.Now().Format("20060102"), randomString(5))
 }

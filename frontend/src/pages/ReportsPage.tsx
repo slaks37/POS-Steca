@@ -21,7 +21,7 @@ const paymentLabels: Record<string, string> = {
   lainnya: 'Lainnya',
 }
 
-/** ReportsPage membaca sheet "Transactions" dan menyajikannya sebagai laporan. */
+/** ReportsPage merangkum riwayat transaksi menjadi laporan penjualan. */
 export function ReportsPage() {
   const [granularity, setGranularity] = useState<Granularity>('harian')
   const [from, setFrom] = useState(toDateInput(daysAgo(29)))

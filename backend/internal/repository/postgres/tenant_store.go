@@ -16,11 +16,11 @@ import (
 
 // tenantColumns dipakai bersama oleh seluruh query baca tenant.
 const tenantColumns = `id, code, business_name, owner_email, owner_name,
-	folder_id, spreadsheet_id, refresh_token_enc, created_at, updated_at`
+	folder_id, refresh_token_enc, created_at, updated_at`
 
-// TenantStore menyimpan daftar tenant di PostgreSQL, menggantikan berkas
-// data/tenants.json. Refresh token Google tetap dienkripsi AES-256-GCM oleh
-// internal/crypto; database hanya menerima ciphertext.
+// TenantStore menyimpan daftar tenant di PostgreSQL. Refresh token Google
+// dienkripsi AES-256-GCM oleh internal/crypto; database hanya menerima
+// ciphertext, tidak pernah token mentah.
 type TenantStore struct {
 	pool   *pgxpool.Pool
 	sealer *crypto.Sealer
@@ -47,10 +47,10 @@ func (s *TenantStore) Create(ctx context.Context, t *domain.Tenant) error {
 
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO tenants (id, code, business_name, owner_email, owner_name,
-			folder_id, spreadsheet_id, refresh_token_enc, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			folder_id, refresh_token_enc, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		t.ID, t.Code, t.BusinessName, strings.ToLower(strings.TrimSpace(t.OwnerEmail)), t.OwnerName,
-		t.FolderID, t.SpreadsheetID, enc, t.CreatedAt, t.UpdatedAt)
+		t.FolderID, enc, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return wrapDB(err, "tenant")
 	}
@@ -58,8 +58,8 @@ func (s *TenantStore) Create(ctx context.Context, t *domain.Tenant) error {
 }
 
 // Update memperbarui tenant. Refresh token yang kosong tidak menimpa nilai
-// lama, meniru perilaku penyimpanan berbasis berkas sebelumnya: pemanggil
-// boleh menyimpan perubahan profil tanpa memegang token.
+// lama, sehingga pemanggil boleh menyimpan perubahan profil tanpa memegang
+// token Google.
 func (s *TenantStore) Update(ctx context.Context, t *domain.Tenant) error {
 	t.UpdatedAt = time.Now().UTC()
 
@@ -79,12 +79,11 @@ func (s *TenantStore) Update(ctx context.Context, t *domain.Tenant) error {
 			owner_email       = $4,
 			owner_name        = $5,
 			folder_id         = $6,
-			spreadsheet_id    = $7,
-			refresh_token_enc = COALESCE($8, refresh_token_enc),
-			updated_at        = $9
+			refresh_token_enc = COALESCE($7, refresh_token_enc),
+			updated_at        = $8
 		WHERE id = $1`,
 		t.ID, t.Code, t.BusinessName, strings.ToLower(strings.TrimSpace(t.OwnerEmail)), t.OwnerName,
-		t.FolderID, t.SpreadsheetID, encPtr, t.UpdatedAt)
+		t.FolderID, encPtr, t.UpdatedAt)
 	if err != nil {
 		return wrapDB(err, "tenant")
 	}
@@ -148,7 +147,7 @@ func (s *TenantStore) scanTenant(row rowScanner) (*domain.Tenant, error) {
 		enc string
 	)
 	err := row.Scan(&t.ID, &t.Code, &t.BusinessName, &t.OwnerEmail, &t.OwnerName,
-		&t.FolderID, &t.SpreadsheetID, &enc, &t.CreatedAt, &t.UpdatedAt)
+		&t.FolderID, &enc, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		if isNoRows(err) {
 			return nil, apperr.NotFound("tenant tidak ditemukan")

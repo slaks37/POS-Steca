@@ -1,5 +1,5 @@
 // Package timex menyeragamkan zona waktu dan format tanggal yang dipakai di
-// seluruh aplikasi, termasuk saat menulis ke Google Sheets.
+// seluruh aplikasi.
 package timex
 
 import (
@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// Layout penulisan tanggal di sheet: RFC3339 lengkap dengan offset zona waktu
-// sehingga tidak ambigu ketika dibaca ulang atau diekspor.
+// Layout penulisan tanggal: RFC3339 lengkap dengan offset zona waktu sehingga
+// tidak ambigu ketika dibaca ulang atau diekspor.
 const Layout = time.RFC3339
 
 var loc atomic.Pointer[time.Location]
@@ -66,9 +66,9 @@ func Format(t time.Time) string {
 	return t.In(Location()).Format(Layout)
 }
 
-// layouts yang diterima saat membaca sel tanggal. Sel bisa saja disunting
-// manual oleh pemilik usaha langsung dari Google Sheets, jadi parser dibuat
-// toleran terhadap beberapa bentuk umum.
+// layouts yang diterima saat membaca tanggal dari parameter permintaan.
+// Klien (web maupun Android) bisa mengirim beberapa bentuk umum, jadi parser
+// dibuat toleran.
 var layouts = []string{
 	time.RFC3339Nano,
 	time.RFC3339,
@@ -83,7 +83,7 @@ var layouts = []string{
 	"1/2/2006",
 }
 
-// Parse membaca sel tanggal. Waktu nol dikembalikan bila tidak bisa dibaca.
+// Parse membaca nilai tanggal. Waktu nol dikembalikan bila tidak bisa dibaca.
 func Parse(s string) time.Time {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -93,11 +93,6 @@ func Parse(s string) time.Time {
 		if t, err := time.ParseInLocation(l, s, Location()); err == nil {
 			return t.In(Location())
 		}
-	}
-	// Google Sheets kadang mengembalikan angka serial tanggal.
-	if serial, err := strconv.ParseFloat(s, 64); err == nil && serial > 20000 && serial < 100000 {
-		epoch := time.Date(1899, 12, 30, 0, 0, 0, 0, Location())
-		return epoch.Add(time.Duration(serial * float64(24*time.Hour)))
 	}
 	return time.Time{}
 }

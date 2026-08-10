@@ -7,8 +7,8 @@ import (
 )
 
 // TenantStore menyimpan metadata tenant beserta refresh token Google-nya.
-// Ini satu-satunya penyimpanan lokal di luar Google Drive/Sheets: dibutuhkan
-// sebagai "bootstrap" agar backend tahu spreadsheet mana milik siapa.
+// Berbeda dengan repository lain, store ini tidak di-scope per tenant karena
+// justru dialah yang menentukan tenant mana yang sedang dilayani.
 type TenantStore interface {
 	Create(ctx context.Context, t *Tenant) error
 	Update(ctx context.Context, t *Tenant) error
@@ -18,7 +18,7 @@ type TenantStore interface {
 	List(ctx context.Context) ([]*Tenant, error)
 }
 
-// ProductRepository memetakan sheet "Products" milik satu tenant.
+// ProductRepository mengelola katalog produk milik satu tenant.
 type ProductRepository interface {
 	List(ctx context.Context, tenantID string) ([]Product, error)
 	Get(ctx context.Context, tenantID, productID string) (*Product, error)
@@ -30,7 +30,7 @@ type ProductRepository interface {
 	AdjustStock(ctx context.Context, tenantID string, deltas map[string]int) error
 }
 
-// TransactionRepository memetakan sheet "Transactions" milik satu tenant.
+// TransactionRepository mengelola riwayat transaksi milik satu tenant.
 type TransactionRepository interface {
 	Append(ctx context.Context, tenantID string, lines []TransactionLine) error
 	// ListLines mengembalikan seluruh baris transaksi pada rentang waktu
@@ -38,7 +38,7 @@ type TransactionRepository interface {
 	ListLines(ctx context.Context, tenantID string, from, to time.Time) ([]TransactionLine, error)
 }
 
-// OrderRepository memetakan sheet "Orders" milik satu tenant.
+// OrderRepository mengelola pesanan milik satu tenant.
 type OrderRepository interface {
 	List(ctx context.Context, tenantID string, f OrderFilter) ([]Order, error)
 	Get(ctx context.Context, tenantID, orderID string) (*Order, error)
@@ -54,7 +54,7 @@ type OrderFilter struct {
 	To     time.Time
 }
 
-// CustomerRepository memetakan sheet "Customers" milik satu tenant.
+// CustomerRepository mengelola data pelanggan milik satu tenant.
 type CustomerRepository interface {
 	List(ctx context.Context, tenantID string) ([]Customer, error)
 	Get(ctx context.Context, tenantID, customerID string) (*Customer, error)
@@ -64,7 +64,7 @@ type CustomerRepository interface {
 	Delete(ctx context.Context, tenantID, customerID string) error
 }
 
-// TableRepository memetakan sheet "Tables" milik satu tenant.
+// TableRepository mengelola denah meja milik satu tenant.
 type TableRepository interface {
 	List(ctx context.Context, tenantID string) ([]Table, error)
 	Get(ctx context.Context, tenantID, tableID string) (*Table, error)
@@ -73,7 +73,7 @@ type TableRepository interface {
 	Delete(ctx context.Context, tenantID, tableID string) error
 }
 
-// EmployeeRepository memetakan sheet "Employees" milik satu tenant.
+// EmployeeRepository mengelola daftar karyawan milik satu tenant.
 type EmployeeRepository interface {
 	List(ctx context.Context, tenantID string) ([]Employee, error)
 	Get(ctx context.Context, tenantID, employeeID string) (*Employee, error)
@@ -91,7 +91,7 @@ type FileStorage interface {
 	Delete(ctx context.Context, tenantID, fileID string) error
 }
 
-// Provisioner menyiapkan folder Drive dan spreadsheet saat onboarding tenant.
+// Provisioner menyiapkan folder Google Drive tenant saat onboarding.
 type Provisioner interface {
 	Provision(ctx context.Context, t *Tenant) error
 }

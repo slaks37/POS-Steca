@@ -19,9 +19,9 @@ interface FormState {
 
 const emptyForm: FormState = { name: '', category: '', price: '', stock: '0', sku: '', image_url: '', image_id: '' }
 
-/** ProductsPage adalah modul inventori yang sinkron dengan sheet "Products". */
+/** ProductsPage adalah modul inventori: katalog, stok, dan gambar produk. */
 export function ProductsPage() {
-  const { isOwner, tenant } = useAuth()
+  const { isOwner } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -120,7 +120,7 @@ export function ProductsPage() {
   }
 
   async function handleDelete(product: Product) {
-    if (!window.confirm(`Hapus produk "${product.name}"? Baris pada Google Sheets ikut terhapus.`)) return
+    if (!window.confirm(`Hapus produk "${product.name}"? Gambarnya di Drive ikut terhapus.`)) return
     setError(null)
     try {
       await request<void>(`/products/${product.id}`, { method: 'DELETE' })
@@ -142,11 +142,6 @@ export function ProductsPage() {
             aria-label="Cari produk"
           />
           <div className="spacer" />
-          {tenant?.spreadsheet_url ? (
-            <a className="btn btn-secondary btn-sm" href={tenant.spreadsheet_url} target="_blank" rel="noreferrer">
-              Buka Google Sheets
-            </a>
-          ) : null}
           {isOwner ? (
             <button type="button" className="btn" onClick={openCreate}>
               + Tambah produk

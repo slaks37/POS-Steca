@@ -68,7 +68,7 @@ type SalesReport struct {
 	Cashiers          []CashierSales `json:"cashiers"`
 }
 
-// ReportService membangun laporan dari sheet "Transactions".
+// ReportService membangun laporan dari baris transaksi.
 type ReportService struct {
 	transactions domain.TransactionRepository
 	products     domain.ProductRepository
@@ -338,7 +338,7 @@ func (s *ReportService) Dashboard(ctx context.Context, tenantID, businessName st
 	weekStart := todayStart.AddDate(0, 0, -6)
 
 	// Satu pembacaan rentang bulan berjalan cukup untuk seluruh ringkasan,
-	// sehingga kuota Sheets API tetap hemat.
+	// sehingga dashboard hanya menyentuh database sekali.
 	rangeStart := monthStart
 	if weekStart.Before(rangeStart) {
 		rangeStart = weekStart

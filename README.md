@@ -19,10 +19,10 @@ Arsitekturnya berlapis port/repository, jadi datastore bisa diganti tanpa menyen
                                └────────────────┘
 ```
 
-> **Catatan migrasi.** Versi awal memakai Google Sheets sebagai sumber kebenaran. Sejak tahap 1
-> migrasi, perannya digantikan PostgreSQL; kode `repository/gsheets` sengaja dipertahankan
-> karena akan dipakai kembali sebagai fitur sinkronisasi opsional. Lihat
-> [PostgreSQL (datastore produksi)](#postgresql-datastore-produksi).
+> **Catatan riwayat.** Versi awal aplikasi ini memakai Google Sheets sebagai sumber
+> kebenaran. Perannya sudah digantikan sepenuhnya oleh PostgreSQL, dan seluruh kode
+> datastore Sheets telah dihapus dari repositori. Google kini hanya dipakai untuk login
+> OAuth pemilik dan penyimpanan gambar produk di Drive.
 
 ---
 
@@ -30,7 +30,7 @@ Arsitekturnya berlapis port/repository, jadi datastore bisa diganti tanpa menyen
 
 - [Fitur](#fitur)
 - [Tech stack](#tech-stack)
-- [Struktur data di Google Drive](#struktur-data-di-google-drive)
+- [Penyimpanan data](#penyimpanan-data)
 - [Struktur project](#struktur-project)
 - [Menjalankan cepat (mode demo, tanpa akun Google)](#menjalankan-cepat-mode-demo-tanpa-akun-google)
 - [Setup Google Cloud (mode produksi)](#setup-google-cloud-mode-produksi)
@@ -51,10 +51,10 @@ Arsitekturnya berlapis port/repository, jadi datastore bisa diganti tanpa menyen
 | **Autentikasi & multi-tenant** | Pemilik masuk lewat Google OAuth2; setiap bisnis terhubung ke akun Google-nya sendiri. Karyawan masuk dengan kode bisnis + email + PIN. |
 | **Kasir** | Pilih produk, keranjang, hitung kembalian, metode tunai/QRIS/kartu, struk digital siap cetak. |
 | **Manajemen pesanan (ala Trofi)** | Papan `baru → diproses → selesai`, sumber pesanan `kasir langsung` atau `online`, pembatalan mengembalikan stok. |
-| **Inventori/produk** | CRUD produk yang sinkron dengan sheet `Products`, termasuk unggah foto produk ke folder Drive tenant. |
-| **Laporan penjualan** | Dibaca dari sheet `Transactions`: harian/mingguan/bulanan, produk terlaris, total omzet, metode pembayaran, performa kasir. |
-| **CRM & loyalitas** | Sheet `Customers` per tenant. Kasir boleh menautkan pelanggan saat checkout — opsional, transaksi anonim tetap sah. Poin terkumpul otomatis 1 poin per Rp 10.000 belanja, dan owner punya halaman pelanggan lengkap dengan riwayat pembelian. |
-| **Denah / nomor meja** | Sheet `Tables` berisi nomor/nama meja dan kapasitasnya. Status `kosong / terisi / perlu dibersihkan` terlihat di layar kasir dan papan pesanan, dan setiap transaksi bisa dikaitkan ke meja tertentu. |
+| **Inventori/produk** | CRUD produk beserta stok, termasuk unggah foto produk ke folder Drive tenant. |
+| **Laporan penjualan** | Dibaca dari riwayat transaksi: harian/mingguan/bulanan, produk terlaris, total omzet, metode pembayaran, performa kasir. |
+| **CRM & loyalitas** | Basis pelanggan per tenant. Kasir boleh menautkan pelanggan saat checkout — opsional, transaksi anonim tetap sah. Poin terkumpul otomatis 1 poin per Rp 10.000 belanja, dan owner punya halaman pelanggan lengkap dengan riwayat pembelian. |
+| **Denah / nomor meja** | Nomor/nama meja beserta kapasitasnya. Status `kosong / terisi / perlu dibersihkan` terlihat di layar kasir dan papan pesanan, dan setiap transaksi bisa dikaitkan ke meja tertentu. |
 | **Karyawan** | Role `owner` dan `kasir` dengan level akses berbeda, PIN di-hash bcrypt. |
 | **Dashboard owner** | Omzet hari ini & bulan ini, tren 7 hari, produk terlaris, pesanan berjalan, peringatan stok menipis. |
 | **Kanal pesan online** | Halaman menu publik `/menu/<KODE-BISNIS>` tanpa login; pesanan langsung masuk ke papan pesanan kasir. |
@@ -70,83 +70,42 @@ Arsitekturnya berlapis port/repository, jadi datastore bisa diganti tanpa menyen
   Tata letak dioptimalkan untuk tablet kasir: sidebar menyusut jadi rel ikon di bawah
   1320px dan target sentuh diperbesar pada layar ≤900px.
 - **Datastore** — PostgreSQL 14+ lewat [pgx](https://github.com/jackc/pgx) dengan skema
-  multi-tenant dan migrasi SQL terembed. Google Drive API v3 + Google Sheets API v4 tetap
-  dipakai untuk OAuth2 per akun pengguna dan gambar produk.
+  multi-tenant dan migrasi SQL terembed. Google Drive API v3 dipakai untuk OAuth2 per akun
+  pengguna dan penyimpanan gambar produk.
 - **Android** — [Capacitor](https://capacitorjs.com/) membungkus build web yang sama menjadi
   APK/AAB (`id.stecapos.app`), tanpa menulis ulang UI. Lihat
   [Aplikasi Android](#aplikasi-android-capacitor).
 
 ---
 
-## Struktur data di Google Drive
+## Penyimpanan data
 
-> **Peran Google Drive sekarang.** Pada mode produksi (`POS_DATASTORE=postgres`), Drive dipakai
-> untuk login OAuth pemilik dan menyimpan **gambar produk** — sehingga saat onboarding hanya
-> folder Drive yang disiapkan. Struktur spreadsheet di bawah ini berlaku pada mode lama
-> (`POS_DATASTORE=google`) dan menjadi acuan fitur sinkronisasi opsional tahap berikutnya.
+Ada dua tempat penyimpanan, dengan pembagian tugas yang tegas:
 
-Saat pemilik pertama kali masuk dengan Google pada mode `google`, backend otomatis membuat:
+| Apa | Di mana | Kenapa |
+|---|---|---|
+| Data terstruktur — tenant, karyawan, produk, transaksi, pesanan, pelanggan, meja | **PostgreSQL** | satu sumber kebenaran, terisolasi per tenant, dijaga constraint database |
+| Berkas biner — gambar produk | **Google Drive milik pemilik akun** | file tetap milik pemilik usaha dan bisa dibuka langsung |
+| Identitas pemilik | **Google OAuth2** | pemilik masuk dengan akun Google-nya sendiri |
+
+Saat pemilik pertama kali masuk dengan Google, backend membuat satu folder Drive khusus
+tenant tersebut:
 
 ```
 Drive pemilik akun/
-└── POS Steca - <Nama Bisnis>/          ← folder khusus tenant
-    ├── POS Steca Data - <Nama Bisnis>  ← Google Spreadsheet (datastore)
+└── Steca POS - <Nama Bisnis>/          ← folder khusus tenant
     ├── produk-20260809-150405-a1b2c.jpg
     └── produk-...                       ← seluruh foto produk tenant
 ```
 
-Spreadsheet berisi enam sheet:
+Tidak ada spreadsheet yang dibuat: seluruh data terstruktur langsung masuk ke PostgreSQL.
+Tautan folder ini bisa dibuka pemilik dari halaman **Pengaturan**.
 
-**`Products`**
+Refresh token Google **selalu terenkripsi AES-256-GCM** memakai `ENCRYPTION_KEY` sebelum
+disimpan pada kolom `tenants.refresh_token_enc`, tidak pernah tersimpan sebagai teks biasa,
+dan tidak pernah dikirim ke frontend.
 
-| ID | Nama | Kategori | Harga | Stok | SKU | URL Gambar | ID Gambar |
-|---|---|---|---|---|---|---|---|
-
-> Kolom *ID Gambar* menyimpan file ID Drive agar gambar lama bisa dibersihkan
-> saat produk diubah atau dihapus.
-
-**`Transactions`** — append-only, satu baris per item terjual
-
-| Tanggal | ID Transaksi | Item | Qty | Harga Satuan | Total | Metode Pembayaran | Kasir |
-|---|---|---|---|---|---|---|---|
-
-**`Orders`** — modul manajemen pesanan
-
-| ID Pesanan | Kode | ID Transaksi | Tanggal | Diperbarui | Status | Sumber | Nama Pelanggan | No Meja | Items (JSON) | Total | Catatan | Kasir | ID Pelanggan | ID Meja |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-
-**`Employees`**
-
-| ID | Nama | Email | Role | Status | PIN Hash | Dibuat |
-|---|---|---|---|---|---|---|
-
-**`Customers`** — CRM & loyalitas
-
-| ID | Nama | No HP | Total Belanja | Poin | Terakhir Belanja | Dibuat |
-|---|---|---|---|---|---|---|
-
-**`Tables`** — denah meja F&B
-
-| ID | Nama Meja | Kapasitas | Status | Area | ID Pesanan Aktif | Diperbarui |
-|---|---|---|---|---|---|---|
-
-> Kolom baru selalu ditambahkan di ujung kanan, dan aplikasi otomatis
-> melengkapi baris header lama saat pemilik login kembali — spreadsheet tenant
-> yang sudah berisi data tidak perlu dimigrasi manual.
-
-Spreadsheet ini tetap bisa dibuka, difilter, dan diekspor langsung oleh pemilik usaha dari
-Google Sheets — perubahan manual yang wajar (misal mengetik `Rp 15.000` pada kolom harga)
-tetap terbaca oleh aplikasi.
-
-### Penyimpanan daftar tenant
-
-Backend perlu tahu folder/spreadsheet mana milik siapa **sebelum** bisa memanggil Google API.
-
-- Mode `postgres`: data tenant ada di tabel `tenants`.
-- Mode `google`: data tenant ada di berkas `data/tenants.json`.
-
-Pada kedua mode, refresh token Google **selalu terenkripsi AES-256-GCM** memakai
-`ENCRYPTION_KEY`, tidak pernah tersimpan sebagai teks biasa, dan tidak pernah dikirim ke frontend.
+Skema tabelnya dijelaskan di [PostgreSQL (datastore produksi)](#postgresql-datastore-produksi).
 
 ---
 
@@ -161,13 +120,12 @@ backend/
     ├── apperr/                     # error aplikasi → status HTTP
     ├── crypto/                     # AES-256-GCM untuk refresh token
     ├── timex/                      # zona waktu & format tanggal (WIB default)
-    ├── googleapi/                  # pembungkus OAuth2, Drive, Sheets + retry
+    ├── googleapi/                  # pembungkus OAuth2 + Google Drive
     ├── repository/
     │   ├── postgres/               # implementasi port di atas PostgreSQL (produksi)
     │   │   └── migrations/         # SQL terurut, di-embed ke biner
-    │   ├── gsheets/                # implementasi port di atas Sheets & Drive
-    │   ├── memory/                 # driver in-memory (demo & pengembangan)
-    │   └── tenantstore/            # daftar tenant di disk (mode google saja)
+    │   ├── drivestore/             # folder & gambar produk di Google Drive
+    │   └── memory/                 # driver in-memory (demo & pengembangan)
     ├── service/                    # aturan bisnis: auth, kasir, pesanan, laporan…
     └── handler/                    # routing Gin, middleware, RBAC, validasi
 
@@ -230,11 +188,11 @@ di sidebar serta halaman **Pengaturan**.
 ## Setup Google Cloud (mode produksi)
 
 1. Buka [Google Cloud Console](https://console.cloud.google.com/) → buat project baru.
-2. **APIs & Services → Library** → aktifkan **Google Drive API** dan **Google Sheets API**.
+2. **APIs & Services → Library** → aktifkan **Google Drive API**.
 3. **APIs & Services → OAuth consent screen**:
    - User type: *External* (atau *Internal* bila memakai Google Workspace).
-   - Tambahkan scope: `.../auth/drive.file`, `.../auth/spreadsheets`, `openid`,
-     `.../auth/userinfo.email`, `.../auth/userinfo.profile`.
+   - Tambahkan scope: `.../auth/drive.file`, `openid`, `.../auth/userinfo.email`,
+     `.../auth/userinfo.profile`.
    - Selama masih berstatus *Testing*, tambahkan email pemilik usaha sebagai **Test users**.
 4. **APIs & Services → Credentials → Create Credentials → OAuth client ID**:
    - Application type: **Web application**.
@@ -283,9 +241,9 @@ Bila frontend dan backend berbeda domain, set `VITE_API_BASE_URL` ke URL penuh b
 (misal `https://api.tokoanda.com/api/v1`) dan pastikan domain frontend terdaftar pada
 `CORS_ORIGINS` di backend.
 
-Backend akan menolak start bila `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`,
-atau `ENCRYPTION_KEY` belum diisi pada mode `google` — supaya salah konfigurasi ketahuan
-saat deploy, bukan saat pengguna pertama login.
+Backend akan menolak start bila `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`JWT_SECRET`, atau `ENCRYPTION_KEY` belum diisi pada mode `postgres` — supaya salah
+konfigurasi ketahuan saat deploy, bukan saat pengguna pertama login.
 
 Seluruh variabel env terdokumentasi di [`backend/.env.example`](backend/.env.example).
 
@@ -293,19 +251,19 @@ Seluruh variabel env terdokumentasi di [`backend/.env.example`](backend/.env.exa
 
 ## PostgreSQL (datastore produksi)
 
-Sejak **tahap 1 migrasi**, PostgreSQL adalah sumber kebenaran data produksi. Google Sheets
-tidak lagi menjadi penyimpanan utama, tetapi seluruh kodenya **tetap ada** di
-`internal/repository/gsheets` karena akan dipakai kembali sebagai fitur sinkronisasi
-opsional pada tahap berikutnya.
+PostgreSQL adalah satu-satunya sumber kebenaran data produksi. Datastore Google Sheets yang
+dipakai versi awal sudah dihapus seluruhnya agar tidak ada dua jalur logika yang harus
+dijaga selaras.
 
 Arsitektur port/repository tidak berubah: layer service tetap berbicara ke antarmuka di
 `internal/domain`, dan hanya implementasinya yang berganti.
 
 ```
 handler → service → domain (port) ← implementasi:
-                                     ├── repository/postgres   ← produksi (tahap 1)
-                                     ├── repository/gsheets    ← dipertahankan untuk sinkronisasi
+                                     ├── repository/postgres   ← produksi
                                      └── repository/memory     ← demo & pengembangan
+
+                                     repository/drivestore     ← folder & gambar produk (Drive)
 ```
 
 ### Mode datastore
@@ -313,12 +271,12 @@ handler → service → domain (port) ← implementasi:
 | `POS_DATASTORE` | Sumber kebenaran | Kebutuhan |
 |---|---|---|
 | `postgres` | PostgreSQL | `DATABASE_URL`, kredensial Google (login pemilik + gambar produk) |
-| `google` | Google Sheets | kredensial Google saja (mode lama, masih didukung) |
 | `memory` | RAM proses | tanpa setup apa pun — dipakai mode demo |
 
-Pada mode `postgres`, Google Drive tetap dipakai untuk **dua hal**: OAuth login pemilik, dan
-penyimpanan gambar produk. Karena itu saat onboarding hanya folder Drive yang disiapkan —
-spreadsheet baru dibuat lagi nanti ketika fitur sinkronisasi diaktifkan.
+Hanya dua mode ini yang ada: `postgres` untuk produksi, `memory` untuk demo dan pengujian
+tanpa infrastruktur. Pada mode `postgres`, Google Drive tetap dipakai untuk **dua hal**:
+OAuth login pemilik dan penyimpanan gambar produk — karena itu saat onboarding hanya folder
+Drive yang disiapkan.
 
 ### Skema multi-tenant
 
@@ -328,13 +286,13 @@ data antar bisnis tidak bisa saling terbaca meskipun ID entitasnya kebetulan sam
 
 | Tabel | Isi |
 |---|---|
-| `tenants` | Menggantikan `data/tenants.json`. Refresh token Google tetap **terenkripsi AES-256-GCM** oleh `internal/crypto`; database hanya menerima ciphertext. |
+| `tenants` | Identitas bisnis + folder Drive-nya. Refresh token Google **terenkripsi AES-256-GCM** oleh `internal/crypto`; database hanya menerima ciphertext. |
 | `employees` | Karyawan + PIN bcrypt. Unik per tenant berdasarkan email. |
 | `products` | Katalog. SKU unik per tenant (boleh kosong). |
 | `customers` | CRM & loyalitas. `phone_normalized` diisi aplikasi memakai `domain.NormalizePhone`, unik per tenant. |
 | `tables` | Denah meja. Nama unik per tenant, status dijaga `CHECK`. |
 | `orders` | Pesanan; daftar item disimpan sebagai `JSONB` agar tetap satu baris per pesanan. |
-| `transaction_lines` | Append-only, satu baris per item terjual — padanan sheet `Transactions`. |
+| `transaction_lines` | Append-only, satu baris per item terjual; dasar seluruh laporan penjualan. |
 
 Aturan yang dulu hanya dijaga aplikasi kini juga dijaga database: `CHECK` untuk status
 pesanan/meja dan role, indeks unik untuk SKU/email/nomor HP, serta `stock >= 0`.
@@ -347,6 +305,8 @@ dengan penamaan `<versi>_<nama>.up.sql` dan `.down.sql`:
 ```
 0001_init.up.sql
 0001_init.down.sql
+0002_drop_spreadsheet_id.up.sql
+0002_drop_spreadsheet_id.down.sql
 ```
 
 Berkas tersebut **di-embed ke dalam biner** (`go:embed`), jadi deployment cukup mengirim satu
@@ -358,8 +318,9 @@ executable. Saat aplikasi start, migrasi yang belum pernah dijalankan diterapkan
 
 Setel `RUN_MIGRATIONS=false` bila Anda menjalankan migrasi terpisah di pipeline deployment.
 
-Menambah perubahan skema berikutnya: buat `0002_<nama>.up.sql` dan `.down.sql`, lalu jalankan
-aplikasi seperti biasa.
+Menambah perubahan skema berikutnya: buat `0003_<nama>.up.sql` dan `.down.sql`, lalu jalankan
+aplikasi seperti biasa. Migrasi `0002` adalah contohnya — kolom `tenants.spreadsheet_id`
+dibuang setelah datastore Sheets dihapus.
 
 ### PostgreSQL lokal untuk development
 
@@ -410,8 +371,8 @@ Yang dibutuhkan aplikasi hanyalah `DATABASE_URL`. Beberapa hal yang perlu Anda p
 
 - **PostgreSQL 14 atau lebih baru** (dikembangkan dan diuji dengan versi 16).
 - **SSL aktif** untuk koneksi lewat internet: `?sslmode=require` pada URL.
-- **Backup rutin dan teruji.** Sejak tahap ini, database adalah satu-satunya salinan data
-  penjualan — Google Sheets tidak lagi menjadi cadangan otomatis.
+- **Backup rutin dan teruji.** Database adalah satu-satunya salinan data penjualan; tidak
+  ada cadangan otomatis di tempat lain.
 - **Kuota koneksi.** Pool dibatasi 10 koneksi per instance aplikasi; sesuaikan bila paket
   provider Anda lebih kecil.
 - **`ENCRYPTION_KEY` yang sama** dengan yang dipakai sebelumnya. Kunci ini membuka
@@ -424,11 +385,12 @@ Contoh `DATABASE_URL` produksi:
 postgres://pengguna:sandi@host-penyedia.example:5432/pos_steca?sslmode=require
 ```
 
-### Instalasi lama yang masih memakai Google Sheets
+### Instalasi lama berbasis Google Sheets
 
-Instalasi berbasis `POS_DATASTORE=google` tetap berjalan apa adanya — tidak ada yang rusak.
-Pemindahan data dari spreadsheet ke PostgreSQL akan disediakan pada tahap berikutnya bersama
-fitur sinkronisasi; tahap 1 ini fokus menyiapkan datastore barunya lebih dulu.
+Mode `POS_DATASTORE=google` sudah **tidak ada lagi**: backend akan menolak start bila nilai
+itu masih tersetel, dan pesan galatnya menyebutkan pilihan yang tersedia. Instalasi lama
+perlu menyiapkan PostgreSQL lalu memasukkan datanya sendiri — spreadsheet tenant tetap utuh
+di Drive pemilik dan bisa diekspor sebagai CSV untuk keperluan itu.
 
 ---
 
@@ -685,7 +647,7 @@ Repositori ini hanya menyiapkan project sampai menghasilkan APK/AAB. Langkah ber
 - **Mengisi listing toko**: judul, deskripsi, tangkapan layar, ikon toko 512×512, banner
   1024×500, kategori, dan kontak.
 - **Kebijakan privasi** yang bisa diakses publik — wajib, terlebih karena aplikasi ini
-  mengakses Google Drive dan Sheets milik pengguna.
+  mengakses Google Drive milik pengguna.
 - **Data safety form**, target audiens, serta deklarasi izin bila nanti `CAMERA` diaktifkan.
 - **Play App Signing**: Google menyarankan menyerahkan kunci penandatanganan aplikasi ke
   Google; kunci upload yang Anda buat di atas tetap milik Anda.
@@ -718,10 +680,9 @@ npm run typecheck  # TypeScript strict
 npm run build
 ```
 
-Cakupan pengujian backend meliputi pemetaan baris Sheets ↔ model (termasuk toleransi format
-rupiah), agregasi laporan, alur kasir dan pesanan, akumulasi poin loyalitas, siklus status
-meja, penyimpanan tenant terenkripsi, serta uji integrasi HTTP untuk RBAC, checkout, dan
-kanal pesanan online.
+Cakupan pengujian backend meliputi agregasi laporan, alur kasir dan pesanan, akumulasi poin
+loyalitas, siklus status meja, penyimpanan tenant terenkripsi, normalisasi nomor HP, serta
+uji integrasi HTTP untuk RBAC, checkout, dan kanal pesanan online.
 
 Khusus layer PostgreSQL:
 
@@ -740,14 +701,11 @@ Khusus layer PostgreSQL:
 - **QRIS dan kartu masih placeholder.** Transaksi dicatat lunas tanpa memanggil payment
   gateway. Integrasi nyata cukup ditambahkan di `service.OrderService.Checkout` sebelum
   transaksi ditulis.
-- **Konkurensi.** Pada mode `postgres`, penyesuaian stok dihitung di database
-  (`GREATEST(stock + $3, 0)` di dalam transaksi) sehingga aman untuk banyak kasir maupun
-  banyak instance aplikasi. Pada mode `google`, operasi baca-ubah-tulis masih diserialkan per
-  tenant memakai mutex di dalam proses (`gsheets.Provider.Lock`) — batasan yang ikut hilang
-  begitu pindah ke PostgreSQL.
-- **Kuota API.** Cache katalog (`SHEETS_CACHE_TTL`) dan retry eksponensial 429/5xx hanya
-  berlaku pada mode `google`; mode `postgres` membaca langsung dari database tanpa cache
-  karena tidak ada kuota yang perlu dihemat.
+- **Konkurensi.** Penyesuaian stok dihitung di database (`GREATEST(stock + $3, 0)` di dalam
+  transaksi) sehingga aman untuk banyak kasir maupun banyak instance aplikasi sekaligus.
+- **Kuota API Google.** Hanya unggah/hapus gambar produk yang menyentuh Google Drive, jadi
+  lalu lintasnya kecil dan tidak ada cache katalog yang perlu dijaga. Pembacaan data
+  sehari-hari sepenuhnya dilayani PostgreSQL.
 - **Poin loyalitas** dihitung 1 poin per Rp 10.000 (`service.RupiahPerPoint`), dibulatkan
   ke bawah, dan hanya diberikan setelah pembayaran diterima — pesanan online baru
   mendapat poin ketika kasir menyelesaikan pembayarannya. Pelanggan dikenali dari nomor
@@ -760,5 +718,6 @@ Khusus layer PostgreSQL:
   diterbitkan — penjualan yang sudah terjadi tidak boleh hilang karena kegagalan sinkronisasi.
 - **Gambar produk diberi izin baca publik** di Drive agar bisa ditampilkan pada tag `<img>`.
   Tautannya sulit ditebak, tetapi siapa pun yang memegang tautan tersebut bisa membukanya.
-- **Zona waktu** default WIB (UTC+7) dan bisa diubah lewat `APP_TIMEZONE`. Tanggal ditulis
-  ke sheet dalam format RFC3339 lengkap dengan offset agar tidak ambigu saat diekspor.
+- **Zona waktu** default WIB (UTC+7) dan bisa diubah lewat `APP_TIMEZONE`. Waktu disimpan
+  sebagai `TIMESTAMPTZ` (UTC) di database dan ditampilkan mengikuti zona waktu aplikasi,
+  sehingga laporan harian tidak bergeser.
